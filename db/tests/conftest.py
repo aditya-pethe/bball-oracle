@@ -28,18 +28,21 @@ ADMIN_DSN = os.environ.get(
 
 TEST_DB = f"bball_sandbox_ro_test_{os.getpid()}"
 SANDBOX_ROLE = "sandbox_ro"
+APP_RW_ROLE = "app_rw"
 # Stands in for Supabase's `postgres`: owns the database, has CREATEROLE, is NOT a superuser.
 OWNER_ROLE = "bball_test_owner"
 OWNER_PASSWORD = "bball_test_owner_local_only"
-# Local-cluster-only credential. The migration deliberately ships no password; see
+# Local-cluster-only credentials. The migrations deliberately ship no passwords; see
 # .agents/p0_sandbox_ro_design.md.
 SANDBOX_PASSWORD = "sandbox_ro_local_test_only"
+APP_RW_PASSWORD = "app_rw_local_test_only"
 
 LOCAL_HOSTS = {"", "localhost", "127.0.0.1", "::1", "/tmp", "/var/run/postgresql"}
 
-# A table added to `nba` AFTER the grants ran, to prove the grants are table-scoped and
-# that no ALTER DEFAULT PRIVILEGES is in play.
+# Tables added AFTER the grants ran, to prove the grants are table-scoped and that no
+# ALTER DEFAULT PRIVILEGES is in play.
 LATE_TABLE = "nba.added_after_grants"
+LATE_APP_TABLE = "app.added_after_grants"
 
 
 def _assert_disposable_target(dsn: str) -> None:
@@ -114,7 +117,7 @@ def test_db_dsn():
             # Roles are cluster-global, so the migration's CREATE ROLE would be skipped on
             # the next run if this one is left behind. Best-effort: the role may legitimately
             # own grants in another database on the same cluster.
-            for role in (SANDBOX_ROLE, OWNER_ROLE):
+            for role in (SANDBOX_ROLE, APP_RW_ROLE, OWNER_ROLE):
                 try:
                     cur.execute(f"DROP ROLE IF EXISTS {role}")
                 except psycopg2.Error as exc:
@@ -130,19 +133,24 @@ def admin(test_db_dsn):
         for path in migration_files():
             cur.execute(path.read_text())
 
-        # Stand-in for the real `app` schema (NextAuth users/sessions, query_log), which
-        # does not exist yet but must be unreachable from sandbox_ro when it does.
-        cur.execute("CREATE SCHEMA app")
-        cur.execute("CREATE TABLE app.users (id bigint PRIMARY KEY, email text)")
-        cur.execute("INSERT INTO app.users VALUES (1, 'victim@example.com')")
+        # The real `app` schema exists as of migration 0003; seed a victim row so the
+        # sandbox_ro isolation tests assert against actual data, not an empty table.
+        cur.execute(
+            "INSERT INTO app.users (name, email) VALUES ('victim', 'victim@example.com')"
+        )
 
         # Created after the migrations so it can only be visible via a schema-wide grant
         # or default privileges -- neither of which should exist.
         cur.execute(f"CREATE TABLE {LATE_TABLE} (id bigint PRIMARY KEY)")
 
-        # Give the sandbox role a password for the duration of this run only. Raises if the
-        # role migration has not been applied -- which is the intended pre-migration failure.
+        # A table added to `app` after the grants ran -- app_rw's grants are table-scoped
+        # exactly like sandbox_ro's, so it must not be readable.
+        cur.execute(f"CREATE TABLE {LATE_APP_TABLE} (id bigint PRIMARY KEY)")
+
+        # Give both roles passwords for the duration of this run only. Raises if the
+        # role migrations have not been applied -- the intended pre-migration failure.
         cur.execute(f"ALTER ROLE {SANDBOX_ROLE} PASSWORD %s", (SANDBOX_PASSWORD,))
+        cur.execute(f"ALTER ROLE {APP_RW_ROLE} PASSWORD %s", (APP_RW_PASSWORD,))
     yield conn
     conn.close()
 
@@ -156,6 +164,18 @@ def sandbox_dsn(admin, test_db_dsn):
 def ro_defaults(sandbox_dsn):
     """sandbox_ro connection with the role's own session defaults left intact."""
     conn = _connect(sandbox_dsn)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture(scope="session")
+def app_rw_dsn(admin, test_db_dsn):
+    return _dsn_for(TEST_DB, user=APP_RW_ROLE, password=APP_RW_PASSWORD)
+
+
+@pytest.fixture
+def rw(app_rw_dsn):
+    conn = _connect(app_rw_dsn)
     yield conn
     conn.close()
 
