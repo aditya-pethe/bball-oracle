@@ -48,11 +48,12 @@ export async function validateSql(sql: string): Promise<ValidationResult> {
     return { ok: false, reason: "could not parse SQL" };
   }
 
-  if (result.stmts.length !== 1) {
+  const stmts = result.stmts;
+  if (!stmts || stmts.length !== 1) {
     return { ok: false, reason: "only a single SELECT statement is allowed" };
   }
 
-  const stmt = result.stmts[0].stmt as Record<string, unknown> | undefined;
+  const stmt = stmts[0].stmt as Record<string, unknown> | undefined;
   if (!stmt || !("SelectStmt" in stmt)) {
     const statementType = stmt ? Object.keys(stmt)[0] : "unknown";
     return { ok: false, reason: `statement type ${statementType} is not allowed` };
