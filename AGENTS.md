@@ -11,7 +11,9 @@
 Hosted NBA analytics app: authenticated users write arbitrary read-only SQL against a real NBA play-by-play dataset and see results in a UI. MVP goal: sign-in → SQL sandbox → real data → results, working end-to-end, safely and cheaply. `project_plan.md` is the full product spec (scope, architecture, data model); this file is operational rules for agents working in this repo, not a restatement of it.
 
 ## Status
-Phase 0 (data pipeline) complete and merged to `main`: schema (`db/migrations/0001`) and `sandbox_ro` role (`db/migrations/0002`) are applied to the live Supabase project, and the 2023-24 regular season is loaded for real (`nba.pbp_event`/`nba.shot_detail`, 786K rows total, 216MB) — see Resolved during Phase 0 for why this is a deliberately narrower window than originally proposed. `sandbox_ro` has no password provisioned yet (deliberate; needed before Phase 1 connects as it). Phase 1 (query API) has not started.
+Phase 0 (data pipeline) complete and merged to `main`: schema (`db/migrations/0001`) and `sandbox_ro` role (`db/migrations/0002`) are applied to the live Supabase project, and the 2023-24 regular season is loaded for real (`nba.pbp_event`/`nba.shot_detail`, 786K rows total, 216MB) — see Resolved during Phase 0 for why this is a deliberately narrower window than originally proposed.
+
+Phase 1 (query API) implemented on `feat/query-api`: Next.js 16 app in `web/`; migration `0003` (schema `app` + `app_rw` role) applied to the live project; both roles have passwords provisioned (in `.env`, never committed); `/api/query` composes session gate → Postgres rate limit → libpg-query validator → `sandbox_ro` executor, with every post-auth attempt writing exactly one `app.query_log` row. All suites green (web 107, grants 90, ETL 27). Still open before merging to `main`: GitHub OAuth app creds (user), live E2E sign-in → query, Vercel project wiring.
 
 ## Permission mode
 Claude Code defaults to `auto` mode in this project (`.claude/settings.json`, `permissions.defaultMode: "auto"`) — this applies to the main session and to subagents spawned here via the Agent/Task tool. If you're a different AGENTS.md-compatible tool (Cursor, Aider, Codex, etc.), this setting doesn't apply to you — configure your own auto/approval mode separately; there's no single file that controls it across tools.
@@ -71,7 +73,17 @@ A server added mid-session isn't available in that session — `claude mcp list`
 - No speculative abstractions — build for current MVP scope per `project_plan.md`, not hypothetical future requirements.
 
 ## Commands
-No app scaffolding yet (Phase 1+). Data pipeline (Phase 0), from repo root:
+Web app (Phase 1+), from `web/`:
+```
+npm install
+npm test         # vitest; spins up/tears down a disposable local Postgres itself
+                 # (needs initdb/pg_ctl at /usr/local/bin, ports 54330-54349)
+npm run dev      # needs .env values: APP_RW_DATABASE_URL, SANDBOX_RO_DATABASE_URL,
+                 # AUTH_SECRET, AUTH_GITHUB_ID, AUTH_GITHUB_SECRET (web/.env.local)
+npm run build && npx tsc --noEmit && npm run lint
+```
+
+Data pipeline (Phase 0), from repo root:
 ```
 python3 -m venv .venv
 .venv/bin/pip install -r pipeline/requirements.txt
@@ -91,20 +103,24 @@ BBALL_TEST_ADMIN_DSN=postgresql://postgres@127.0.0.1:5432/postgres .venv/bin/pyt
 ```
 
 ## File organization
-- `db/migrations/NNNN_name.sql` — versioned SQL migrations, applied by hand via Supabase MCP (`apply_migration`), reviewed before applying. `0001` creates schema `nba` (`pbp_event`, `shot_detail`); `0002` creates the `sandbox_ro` role and its grants.
+- `db/migrations/NNNN_name.sql` — versioned SQL migrations, applied by hand via Supabase MCP (`apply_migration`), reviewed before applying. `0001` creates schema `nba` (`pbp_event`, `shot_detail`); `0002` creates the `sandbox_ro` role and its grants; `0003` creates schema `app` (NextAuth adapter tables, `query_log`) and the `app_rw` role (table-scoped DML on `app` only, `query_log` append-only).
+- `web/` — the Next.js app. `web/lib/` holds the safety chain as separate tested modules: `validate-sql.ts` (pure libpg-query AST validator — defense in depth, NOT the boundary), `execute-query.ts` (`sandbox_ro` execution wrapper + query logging), `rate-limit.ts` (sliding window over `app.query_log`), `require-session.ts` (the only auth gate); `web/app/api/query/route.ts` composes them. `web/lib/test-cluster.ts` is the vitest globalSetup that builds the disposable Postgres (applies all of `db/migrations/`).
 - `db/tests/` — pytest/psycopg2 suite asserting on `sandbox_ro`'s actual grants (not application behavior) against a disposable local Postgres. Lives next to `db/migrations/` rather than the repo-root `tests/` since it's testing the data layer, not the pipeline.
 - `pipeline/` — the Python ETL package (config, download, transform, load, CLI). `pipeline/seasons.yaml` is the season-coverage config; editing it and rerunning is the entire backfill mechanism, no code changes.
 - `tests/` — pytest suite for the ETL pipeline (parse/clean edge cases, load/idempotency), fixtures built from real downloaded sample data, not invented.
 - `.agents/` — gitignored scratch space; each phase's investigation/design decision logs live here (e.g. `p0_source_investigation.md`, `p0_schema_design.md`, `p0_sandbox_ro_design.md`, `p0_etl_design.md`) as reasoning context for later tasks, not as product docs.
 
 ## Verification
+A task touching the web app isn't done until `npm test` (from `web/`), `npx tsc --noEmit`, and `npm run build` all pass. Anything touching the safety chain (validator, executor, rate limit, session gate, or the route composing them) must keep the route integration tests and the executor's three-together assertions (timeout / row cap / log) green — those tests are the enforcement of the critical rules above, not a formality.
+
 A task touching the data layer isn't done until:
 1. `.venv/bin/python -m pytest tests/` passes (ETL parse/clean/load/idempotency).
 2. `BBALL_TEST_ADMIN_DSN=... .venv/bin/pytest db/tests` passes (sandbox_ro grants) — mandatory for any change to `db/migrations/0002_sandbox_ro_role.sql`, since this suite is the definition of "correctly restricted," not a formality.
 3. For a schema or grants change: a migration file exists, was reviewed, and was applied to the live Supabase project via `apply_migration` (never applied ad hoc without a corresponding file in `db/migrations/`).
 
 ## Open decisions
-- None currently blocking. Phase 1 decisions (OAuth: GitHub only; rate limiting: Postgres-based over `app.query_log`) resolved at planning — see `.agents/p1_query_api.md` and `project_plan.md` §4/§5.
+- Phase 1 decisions (OAuth: GitHub only; rate limiting: Postgres-based over `app.query_log`; sessions: database strategy for server-side revocation — reasoning in `web/auth.ts`) all resolved.
+- Blocking Phase 1 close-out, not further work: GitHub OAuth app credentials (user action), Vercel project wiring, and confirming the Supavisor pooler username format for custom roles (`sandbox_ro.<project_ref>` / `app_rw.<project_ref>`) when the Vercel DSNs are configured — local dev uses the direct connection.
 
 ## Resolved during Phase 0
 - **Season window:** 2023-24 regular season only, loaded into the live Supabase project (567,662 `pbp_event` rows, 218,701 `shot_detail` rows). Measured at 216MB for one regular season (no playoffs) — the originally proposed 5-season regular+playoffs window would exceed 1GB. Decision: validate the MVP on one season on free tier first; expand via `pipeline/seasons.yaml` + Supabase Pro upgrade once validated, not before. See `project_plan.md` §3/§10.
