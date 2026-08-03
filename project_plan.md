@@ -69,7 +69,7 @@ Next.js app (Vercel)
 ```
 
 - **Frontend + backend:** single Next.js app on Vercel — API routes instead of a separate backend server, per original plan.
-- **Auth:** NextAuth (Auth.js), full accounts from day 1 (not deferred) — required because the sandbox executes arbitrary SQL and needs per-user rate limiting/audit, not just IP-based controls. OAuth providers TBD (default assumption: GitHub + Google) — confirm before Phase 2.
+- **Auth:** NextAuth (Auth.js), full accounts from day 1 (not deferred) — required because the sandbox executes arbitrary SQL and needs per-user rate limiting/audit, not just IP-based controls. OAuth provider: **GitHub only** for MVP (decided at Phase 1 planning); Google is a config-only addition later if wanted.
 - **Database:** Supabase Postgres. Direct Postgres connection from API routes (not PostgREST) — arbitrary SQL requires a real SQL connection, not a REST-over-tables layer.
 - **Rendering:** CSR for the sandbox (matches original plan — interactive, session-gated, no SEO value). SSR/ISR deferred; static season pages are a post-MVP idea (§10), not core MVP.
 
@@ -82,7 +82,7 @@ This is the highest-risk part of the product — a public endpoint that runs use
 3. **Statement-level validation (defense in depth):** parse the submitted SQL server-side (e.g. via a proper SQL parser, not regex) and reject: anything that isn't a single `SELECT` statement, multiple statements, and disallowed keywords (`INSERT`/`UPDATE`/`DELETE`/`DROP`/`ALTER`/`COPY`/`GRANT`/etc.).
 4. **Execution wrapper:** run each query in its own transaction as the `sandbox_ro` role: `BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; <query>; ROLLBACK;`
 5. **Row cap:** hard cap results at e.g. 1,000 rows (server-side, not client-truncated); surface a "results truncated" notice.
-6. **Rate limiting:** per-user and per-IP (e.g. Upstash Redis token bucket), independent of the per-query timeout — caps total query volume, not just single-query cost.
+6. **Rate limiting:** per-user and per-IP, independent of the per-query timeout — caps total query volume, not just single-query cost. Implementation (decided at Phase 1 planning): Postgres-based sliding window over recent `app.query_log` rows — no new infrastructure at MVP scale; swap in Redis (e.g. Upstash) only if it becomes a measured bottleneck.
 7. **Audit logging:** every query (text, user id, duration, row count, error/success) logged to `app.query_log` for abuse monitoring.
 8. **Connection pooling:** capped pool size for the `sandbox_ro` role (Supabase's built-in pooler) so one abusive user can't exhaust connections.
 
@@ -122,7 +122,7 @@ The `nba_data` repo's Apache-2.0 license covers the maintainer's collection scri
 
 ## 10. Open Questions / Assumptions to Confirm
 
-- **OAuth provider(s) for NextAuth:** assumed GitHub + Google — confirm or adjust.
+- **OAuth provider(s) for NextAuth:** resolved — GitHub only for MVP. See §4.
 - **Exact season window:** resolved for now — 2023-24 regular season only, on free tier, pending MVP validation. See §3.
 - **Supabase tier/budget:** resolved for now — confirmed free tier, deliberately scoped to one season because 5-season volume (measured at 216MB/regular-season, so 1GB+ for the full window) doesn't fit free tier. Upgrade to Pro before expanding the season window.
 - **`nba-sql` sibling repo** (`../nba-sql`, mpope9's NBA-API-to-Postgres loader): currently treated as unrelated prior art, not reused — it sources from the live NBA API rather than `nba_data`, and predates this project. Flag if you actually want its loader/schema patterns reused.

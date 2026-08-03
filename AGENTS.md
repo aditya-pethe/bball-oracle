@@ -103,8 +103,8 @@ A task touching the data layer isn't done until:
 2. `BBALL_TEST_ADMIN_DSN=... .venv/bin/pytest db/tests` passes (sandbox_ro grants) — mandatory for any change to `db/migrations/0002_sandbox_ro_role.sql`, since this suite is the definition of "correctly restricted," not a formality.
 3. For a schema or grants change: a migration file exists, was reviewed, and was applied to the live Supabase project via `apply_migration` (never applied ad hoc without a corresponding file in `db/migrations/`).
 
-## Open decisions blocking Phase 2
-- OAuth provider(s) for NextAuth — unconfirmed, currently assumed GitHub + Google.
+## Open decisions
+- None currently blocking. Phase 1 decisions (OAuth: GitHub only; rate limiting: Postgres-based over `app.query_log`) resolved at planning — see `.agents/p1_query_api.md` and `project_plan.md` §4/§5.
 
 ## Resolved during Phase 0
 - **Season window:** 2023-24 regular season only, loaded into the live Supabase project (567,662 `pbp_event` rows, 218,701 `shot_detail` rows). Measured at 216MB for one regular season (no playoffs) — the originally proposed 5-season regular+playoffs window would exceed 1GB. Decision: validate the MVP on one season on free tier first; expand via `pipeline/seasons.yaml` + Supabase Pro upgrade once validated, not before. See `project_plan.md` §3/§10.
