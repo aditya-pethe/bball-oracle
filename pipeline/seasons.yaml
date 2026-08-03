@@ -6,11 +6,12 @@
 # `year` is the 4-digit season-start year in nba_data's own archive naming
 # (2023 -> the 2023-24 season, matching nbastats_2023.tar.xz / nbastats_po_2023.tar.xz).
 #
-# This is a placeholder covering two recent seasons for pipeline testing/dev — the final
-# season window is a separate open product decision (project_plan.md §10), not made here.
+# Matches what's actually loaded in the live Supabase project: 2023-24 regular season only,
+# on free tier (project_plan.md §3/§10). One regular season measured at 216MB for
+# pbp_event + shot_detail combined -- adding playoffs or more seasons here without first
+# upgrading the Supabase plan will blow past the free-tier 500MB cap. Expand this list only
+# after that upgrade.
 
 seasons:
   - year: 2023
-    season_types: [regular, playoffs]
-  - year: 2024
-    season_types: [regular, playoffs]
+    season_types: [regular]
