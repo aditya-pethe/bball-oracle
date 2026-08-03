@@ -1,3 +1,6 @@
 # Scratch space for agent-generated tooling/scripts/artifacts made while contributing.
 # Not part of the product — don't put anything here the app or pipeline depends on.
 .agents/
+__pycache__/
+*.pyc
+.venv/
