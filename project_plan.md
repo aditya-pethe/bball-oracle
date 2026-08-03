@@ -37,7 +37,7 @@ A hosted basketball analytics app where users sign in and run SQL directly again
 
 No player/team dimension tables exist upstream; both are denormalized inline (name + ID + team on every row). A derived `player`/`team` lookup table (for schema-browser autocomplete, cleaner joins) is a cheap post-MVP add, not required to query.
 
-**Season range for MVP:** recent seasons only, proposed default **last 5 seasons (2020-21 through 2024-25)**, both regular season and playoffs. Adjust before Phase 0 if a different window is wanted. Full historical backfill (back to 1996-97) is explicitly a post-MVP task — the pipeline should be built idempotent/season-parameterized so backfill is "run again with a wider season list," not a rewrite.
+**Season range for MVP:** started with **2023-24 regular season only** (loaded and confirmed in the live Supabase project as of Phase 0), not the originally proposed 5-season window. Reason: measuring actual size after loading one regular season showed **216MB for a single regular season alone** (`pbp_event` + `shot_detail`, no playoffs) — the full 5-season regular+playoffs window would land well over 1GB, past the free tier's 500MB cap. Decision: stay on free tier and validate the MVP against one season first; expand to the full 2020-21 through 2024-25 window (regular + playoffs) and upgrade to Supabase Pro only once the single-season MVP is validated. The pipeline is season-parameterized (`pipeline/seasons.yaml`) specifically so this expansion is a config change + rerun, not a rewrite — same mechanism intended for the eventual full historical backfill (back to 1996-97), which remains a post-MVP task.
 
 **Refresh cadence:** none needed for MVP — completed historical seasons don't change. In-season refresh (current season data updates) is a post-MVP concern.
 
@@ -123,8 +123,8 @@ The `nba_data` repo's Apache-2.0 license covers the maintainer's collection scri
 ## 10. Open Questions / Assumptions to Confirm
 
 - **OAuth provider(s) for NextAuth:** assumed GitHub + Google — confirm or adjust.
-- **Exact season window:** proposed default 2020-21 through 2024-25 — confirm or adjust before Phase 0.
-- **Supabase tier/budget:** assume free tier is sufficient for 5-season nbastats+shotdetail volume; revisit if not.
+- **Exact season window:** resolved for now — 2023-24 regular season only, on free tier, pending MVP validation. See §3.
+- **Supabase tier/budget:** resolved for now — confirmed free tier, deliberately scoped to one season because 5-season volume (measured at 216MB/regular-season, so 1GB+ for the full window) doesn't fit free tier. Upgrade to Pro before expanding the season window.
 - **`nba-sql` sibling repo** (`../nba-sql`, mpope9's NBA-API-to-Postgres loader): currently treated as unrelated prior art, not reused — it sources from the live NBA API rather than `nba_data`, and predates this project. Flag if you actually want its loader/schema patterns reused.
 
 ## 11. Phased Roadmap

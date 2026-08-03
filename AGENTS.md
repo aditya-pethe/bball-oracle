@@ -11,7 +11,7 @@
 Hosted NBA analytics app: authenticated users write arbitrary read-only SQL against a real NBA play-by-play dataset and see results in a UI. MVP goal: sign-in → SQL sandbox → real data → results, working end-to-end, safely and cheaply. `project_plan.md` is the full product spec (scope, architecture, data model); this file is operational rules for agents working in this repo, not a restatement of it.
 
 ## Status
-Phase 0 (data pipeline) code-complete and merged to `main`: schema (`db/migrations/0001`) and `sandbox_ro` role (`db/migrations/0002`) are applied to the live Supabase project; the ETL pipeline (`pipeline/`) is built and tested end-to-end against a disposable local Postgres, but has not yet loaded real data into the live project — see Open decisions. `sandbox_ro` has no password provisioned yet (deliberate; needed before Phase 1 connects as it). Phase 1 (query API) has not started.
+Phase 0 (data pipeline) complete and merged to `main`: schema (`db/migrations/0001`) and `sandbox_ro` role (`db/migrations/0002`) are applied to the live Supabase project, and the 2023-24 regular season is loaded for real (`nba.pbp_event`/`nba.shot_detail`, 786K rows total, 216MB) — see Resolved during Phase 0 for why this is a deliberately narrower window than originally proposed. `sandbox_ro` has no password provisioned yet (deliberate; needed before Phase 1 connects as it). Phase 1 (query API) has not started.
 
 ## Permission mode
 Claude Code defaults to `auto` mode in this project (`.claude/settings.json`, `permissions.defaultMode: "auto"`) — this applies to the main session and to subagents spawned here via the Agent/Task tool. If you're a different AGENTS.md-compatible tool (Cursor, Aider, Codex, etc.), this setting doesn't apply to you — configure your own auto/approval mode separately; there's no single file that controls it across tools.
@@ -103,10 +103,12 @@ A task touching the data layer isn't done until:
 2. `BBALL_TEST_ADMIN_DSN=... .venv/bin/pytest db/tests` passes (sandbox_ro grants) — mandatory for any change to `db/migrations/0002_sandbox_ro_role.sql`, since this suite is the definition of "correctly restricted," not a formality.
 3. For a schema or grants change: a migration file exists, was reviewed, and was applied to the live Supabase project via `apply_migration` (never applied ad hoc without a corresponding file in `db/migrations/`).
 
-## Open decisions blocking Phase 0/2
+## Open decisions blocking Phase 2
 - OAuth provider(s) for NextAuth — unconfirmed, currently assumed GitHub + Google.
-- Exact season window — unconfirmed, currently proposed 2020-21 through 2024-25. `pipeline/seasons.yaml` currently ships a placeholder (2023/2024, both season types) for pipeline dev/testing, not a claim about the real window.
-- Supabase tier/budget — project created (`project_ref=zblvjxuaqhjlnuprgemx`), tier/budget still unconfirmed. Schema design estimated ~1GB+ for 5 seasons, possibly exceeding a free-tier 500MB cap — decision was to load one season for real and measure (`pg_total_relation_size`) before committing to the full window, not to resolve this from estimates. Still outstanding: no season has been loaded into the live project yet (needs a real Postgres DSN for Supabase, which this session doesn't have).
+
+## Resolved during Phase 0
+- **Season window:** 2023-24 regular season only, loaded into the live Supabase project (567,662 `pbp_event` rows, 218,701 `shot_detail` rows). Measured at 216MB for one regular season (no playoffs) — the originally proposed 5-season regular+playoffs window would exceed 1GB. Decision: validate the MVP on one season on free tier first; expand via `pipeline/seasons.yaml` + Supabase Pro upgrade once validated, not before. See `project_plan.md` §3/§10.
+- **Supabase tier/budget:** confirmed free tier, by design scoped to the one-season window above.
 - Supabase API "exposed schemas" setting — not independently verified that `nba` is excluded from PostgREST exposure. `get_advisors` flagged RLS-disabled on both new tables (expected, since the app reaches them only via a direct `sandbox_ro` Postgres connection, never PostgREST) but that's a design assumption, not a verified setting. Worth a manual dashboard check (Settings → API → Exposed schemas) before Phase 2.
 - Supavisor pooler username format for `sandbox_ro` (likely `sandbox_ro.<project_ref>`, per `.agents/p0_sandbox_ro_design.md` §6) and the right `CONNECTION LIMIT` value (currently `10`, a guess) — resolve when wiring Phase 1's connection string.
 
