@@ -1,16 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { Pool } from "pg";
 import { checkRateLimit } from "./rate-limit";
-
-const dsn = process.env.APP_RW_DATABASE_URL;
-if (!dsn) {
-  throw new Error("rate-limit tests require APP_RW_DATABASE_URL (a test-cluster app_rw DSN)");
-}
 
 let pool: Pool;
 
 beforeAll(() => {
-  pool = new Pool({ connectionString: dsn, max: 2 });
+  pool = new Pool({ connectionString: inject("appUrl"), max: 2 });
 });
 
 afterAll(async () => {

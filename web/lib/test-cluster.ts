@@ -120,6 +120,11 @@ export default async function setup(project: TestProject) {
       `INSERT INTO app.users (id, name, email) VALUES ($1, 'test', 'test@example.com')`,
       [FIXTURE_USER_ID],
     );
+    // Explicit-id inserts don't advance the identity sequence; realign it so tests
+    // using `INSERT ... RETURNING id` don't collide with the fixture user.
+    await owner.query(
+      `SELECT setval(pg_get_serial_sequence('app.users', 'id'), (SELECT max(id) FROM app.users))`,
+    );
     await owner.query(
       `INSERT INTO nba.pbp_event
          (season, season_type, game_id, eventnum, eventmsgtype, period,
