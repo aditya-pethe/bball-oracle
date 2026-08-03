@@ -1,3 +1,13 @@
 # Scratch space for agent-generated tooling/scripts/artifacts made while contributing.
 # Not part of the product — don't put anything here the app or pipeline depends on.
 .agents/
+
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Downloaded/extracted nba_data archives -- refetched from list_data.txt on demand,
+# never committed.
+.cache/

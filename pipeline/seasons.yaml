@@ -1,0 +1,16 @@
+# Season coverage config for the ETL pipeline.
+#
+# Adding a season, or turning on playoffs for one already listed, is a config change
+# here plus a rerun of `python -m pipeline.cli load` — no code changes needed.
+#
+# `year` is the 4-digit season-start year in nba_data's own archive naming
+# (2023 -> the 2023-24 season, matching nbastats_2023.tar.xz / nbastats_po_2023.tar.xz).
+#
+# This is a placeholder covering two recent seasons for pipeline testing/dev — the final
+# season window is a separate open product decision (project_plan.md §10), not made here.
+
+seasons:
+  - year: 2023
+    season_types: [regular, playoffs]
+  - year: 2024
+    season_types: [regular, playoffs]

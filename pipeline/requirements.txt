@@ -1,0 +1,5 @@
+pandas==2.2.3
+psycopg2-binary==2.9.12
+PyYAML==6.0.3
+requests==2.34.2
+pytest==9.1.1
