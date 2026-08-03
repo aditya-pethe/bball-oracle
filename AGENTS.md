@@ -11,7 +11,7 @@
 Hosted NBA analytics app: authenticated users write arbitrary read-only SQL against a real NBA play-by-play dataset and see results in a UI. MVP goal: sign-in → SQL sandbox → real data → results, working end-to-end, safely and cheaply. `project_plan.md` is the full product spec (scope, architecture, data model); this file is operational rules for agents working in this repo, not a restatement of it.
 
 ## Status
-Pre-implementation. No application code, commands, or directory structure exist yet — Phase 0 (data pipeline) has not started. Update the sections below the moment they stop being true; don't let this file describe an aspirational state.
+Phase 0 (data pipeline) code-complete and merged to `main`: schema (`db/migrations/0001`) and `sandbox_ro` role (`db/migrations/0002`) are applied to the live Supabase project; the ETL pipeline (`pipeline/`) is built and tested end-to-end against a disposable local Postgres, but has not yet loaded real data into the live project — see Open decisions. `sandbox_ro` has no password provisioned yet (deliberate; needed before Phase 1 connects as it). Phase 1 (query API) has not started.
 
 ## Permission mode
 Claude Code defaults to `auto` mode in this project (`.claude/settings.json`, `permissions.defaultMode: "auto"`) — this applies to the main session and to subagents spawned here via the Agent/Task tool. If you're a different AGENTS.md-compatible tool (Cursor, Aider, Codex, etc.), this setting doesn't apply to you — configure your own auto/approval mode separately; there's no single file that controls it across tools.
@@ -71,18 +71,44 @@ A server added mid-session isn't available in that session — `claude mcp list`
 - No speculative abstractions — build for current MVP scope per `project_plan.md`, not hypothetical future requirements.
 
 ## Commands
-Not yet established — no scaffolding exists. Add copy-pasteable build/test/lint commands here as soon as the app and pipeline are scaffolded (Phase 0/1). Until this section is filled in, don't assume a command exists — check the repo.
+No app scaffolding yet (Phase 1+). Data pipeline (Phase 0), from repo root:
+```
+python3 -m venv .venv
+.venv/bin/pip install -r pipeline/requirements.txt
+
+# Run the ETL (needs a real Postgres DSN with write access — sandbox_ro is SELECT-only
+# and cannot be used here):
+NBA_PIPELINE_DATABASE_URL=postgresql://... .venv/bin/python -m pipeline.cli \
+  [--config pipeline/seasons.yaml] [--cache-dir .cache/nba_data]
+
+# ETL test suite (spins up/tears down a disposable local Postgres itself, no setup needed):
+.venv/bin/python -m pytest tests/
+
+# sandbox_ro grant test suite (needs its own admin DSN against a local, disposable
+# Postgres — refuses to run against anything matching supabase/pooler/rds):
+.venv/bin/pip install -r db/tests/requirements.txt
+BBALL_TEST_ADMIN_DSN=postgresql://postgres@127.0.0.1:5432/postgres .venv/bin/pytest db/tests
+```
 
 ## File organization
-Not yet established beyond one thing: `.agents/` is scratch space for agent-generated tooling, scripts, and artifacts made while contributing. It's gitignored — nothing the app or pipeline depends on may live there. Add the full directory map here once Phase 0 scaffolding lands.
+- `db/migrations/NNNN_name.sql` — versioned SQL migrations, applied by hand via Supabase MCP (`apply_migration`), reviewed before applying. `0001` creates schema `nba` (`pbp_event`, `shot_detail`); `0002` creates the `sandbox_ro` role and its grants.
+- `db/tests/` — pytest/psycopg2 suite asserting on `sandbox_ro`'s actual grants (not application behavior) against a disposable local Postgres. Lives next to `db/migrations/` rather than the repo-root `tests/` since it's testing the data layer, not the pipeline.
+- `pipeline/` — the Python ETL package (config, download, transform, load, CLI). `pipeline/seasons.yaml` is the season-coverage config; editing it and rerunning is the entire backfill mechanism, no code changes.
+- `tests/` — pytest suite for the ETL pipeline (parse/clean edge cases, load/idempotency), fixtures built from real downloaded sample data, not invented.
+- `.agents/` — gitignored scratch space; each phase's investigation/design decision logs live here (e.g. `p0_source_investigation.md`, `p0_schema_design.md`, `p0_sandbox_ro_design.md`, `p0_etl_design.md`) as reasoning context for later tasks, not as product docs.
 
 ## Verification
-Not yet established. Once tests exist, document the exact command(s) required before a task can be called done.
+A task touching the data layer isn't done until:
+1. `.venv/bin/python -m pytest tests/` passes (ETL parse/clean/load/idempotency).
+2. `BBALL_TEST_ADMIN_DSN=... .venv/bin/pytest db/tests` passes (sandbox_ro grants) — mandatory for any change to `db/migrations/0002_sandbox_ro_role.sql`, since this suite is the definition of "correctly restricted," not a formality.
+3. For a schema or grants change: a migration file exists, was reviewed, and was applied to the live Supabase project via `apply_migration` (never applied ad hoc without a corresponding file in `db/migrations/`).
 
 ## Open decisions blocking Phase 0/2
 - OAuth provider(s) for NextAuth — unconfirmed, currently assumed GitHub + Google.
-- Exact season window — unconfirmed, currently proposed 2020-21 through 2024-25.
-- Supabase tier/budget — project created (`project_ref=zblvjxuaqhjlnuprgemx`), tier/budget still unconfirmed.
+- Exact season window — unconfirmed, currently proposed 2020-21 through 2024-25. `pipeline/seasons.yaml` currently ships a placeholder (2023/2024, both season types) for pipeline dev/testing, not a claim about the real window.
+- Supabase tier/budget — project created (`project_ref=zblvjxuaqhjlnuprgemx`), tier/budget still unconfirmed. Schema design estimated ~1GB+ for 5 seasons, possibly exceeding a free-tier 500MB cap — decision was to load one season for real and measure (`pg_total_relation_size`) before committing to the full window, not to resolve this from estimates. Still outstanding: no season has been loaded into the live project yet (needs a real Postgres DSN for Supabase, which this session doesn't have).
+- Supabase API "exposed schemas" setting — not independently verified that `nba` is excluded from PostgREST exposure. `get_advisors` flagged RLS-disabled on both new tables (expected, since the app reaches them only via a direct `sandbox_ro` Postgres connection, never PostgREST) but that's a design assumption, not a verified setting. Worth a manual dashboard check (Settings → API → Exposed schemas) before Phase 2.
+- Supavisor pooler username format for `sandbox_ro` (likely `sandbox_ro.<project_ref>`, per `.agents/p0_sandbox_ro_design.md` §6) and the right `CONNECTION LIMIT` value (currently `10`, a guess) — resolve when wiring Phase 1's connection string.
 
 ## Common pitfalls
 None logged yet. Add an entry here only after the same mistake happens twice (two-strikes rule) — don't pre-populate with hypothetical failure modes.
