@@ -4,4 +4,9 @@
 .env
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
+
+# Downloaded/extracted nba_data archives -- refetched from list_data.txt on demand,
+# never committed.
+.cache/
