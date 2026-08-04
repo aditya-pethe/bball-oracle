@@ -3,14 +3,14 @@
 /* Semantic tokens — components reference these (bg-surface, text-ink, …), never raw
    palette values. The later design pass edits this block, not component class lists. */
 @theme {
-  --color-surface: #101214;
-  --color-surface-raised: #16191c;
-  --color-surface-inset: #0b0d0e;
-  --color-edge: #2a2f34;
-  --color-ink: #e6e8ea;
-  --color-ink-muted: #9aa3ab;
-  --color-ink-faint: #5c656d;
-  --color-accent: #e8843c;
+  --color-surface: #0e1013;
+  --color-surface-raised: #15181c;
+  --color-surface-inset: #0a0c0e;
+  --color-edge: #262c33;
+  --color-ink: #e9ebed;
+  --color-ink-muted: #9ba4ad;
+  --color-ink-faint: #626c76;
+  --color-accent: #f0863a;
   --color-accent-ink: #17110b;
   --color-danger: #e0604f;
   --color-warning: #d9a53f;
@@ -33,4 +33,9 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }

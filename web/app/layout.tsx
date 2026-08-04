@@ -15,8 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "bball-oracle",
-  description: "SQL sandbox over NBA play-by-play data",
+  title: "bball-oracle — SQL sandbox for NBA play-by-play data",
+  description:
+    "Write read-only SQL against every play and shot of the 2023-24 NBA season: schema browser, CodeMirror editor, instant results.",
 };
 
 export default async function RootLayout({
@@ -65,6 +66,17 @@ export default async function RootLayout({
           )}
         </header>
         <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+        <footer className="border-t border-edge px-4 py-2 text-center text-[11px] leading-relaxed text-ink-faint">
+          NBA play-by-play data via the{" "}
+          <a
+            href="https://github.com/shufinskiy/nba_data"
+            className="underline decoration-edge underline-offset-2 hover:text-ink-muted"
+          >
+            nba_data
+          </a>{" "}
+          project, sourced from stats.nba.com. Not affiliated with or endorsed
+          by the NBA; underlying data is governed by NBA.com&apos;s terms of use.
+        </footer>
       </body>
     </html>
   );
