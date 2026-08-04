@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { auth, signOut } from "../auth";
 import "./globals.css";
@@ -32,7 +33,11 @@ export default async function RootLayout({
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between border-b border-edge px-4 py-2">
-          <Link href="/" className="font-mono text-sm font-semibold text-ink">
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-mono text-sm font-semibold text-ink"
+          >
+            <Image src="/logo.png" alt="" width={22} height={22} />
             bball-oracle
           </Link>
           {user && (
