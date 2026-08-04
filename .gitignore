@@ -10,3 +10,5 @@ __pycache__/
 # Downloaded/extracted nba_data archives -- refetched from list_data.txt on demand,
 # never committed.
 .cache/
+.vercel/
+.playwright-mcp/

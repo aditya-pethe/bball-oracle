@@ -120,7 +120,8 @@ A task touching the data layer isn't done until:
 
 ## Open decisions
 - Phase 1 decisions (OAuth: GitHub only; rate limiting: Postgres-based over `app.query_log`; sessions: database strategy for server-side revocation — reasoning in `web/auth.ts`) all resolved.
-- Blocking Phase 1 close-out, not further work: GitHub OAuth app credentials (user action), Vercel project wiring, and confirming the Supavisor pooler username format for custom roles (`sandbox_ro.<project_ref>` / `app_rw.<project_ref>`) when the Vercel DSNs are configured — local dev uses the direct connection.
+- Supavisor pooler confirmed (2026-08-03): transaction mode at `aws-0-ca-central-1.pooler.supabase.com:6543`, username `<role>.<project_ref>` (works for both `sandbox_ro` and `app_rw`). Vercel envs use the pooled DSNs; local dev uses the direct connection.
+- Vercel project `bball-oracle` (personal scope, rootDirectory `web`, deployment protection off) is linked and deployed via CLI. Blocking Phase 1 close-out: a production GitHub OAuth app (the dev one's callback is localhost-only) for a deployed E2E sign-in, and installing the Vercel GitHub App on the repo for automatic preview deploys (`git connect` returns repo_not_found until then).
 
 ## Resolved during Phase 0
 - **Season window:** 2023-24 regular season only, loaded into the live Supabase project (567,662 `pbp_event` rows, 218,701 `shot_detail` rows). Measured at 216MB for one regular season (no playoffs) — the originally proposed 5-season regular+playoffs window would exceed 1GB. Decision: validate the MVP on one season on free tier first; expand via `pipeline/seasons.yaml` + Supabase Pro upgrade once validated, not before. See `project_plan.md` §3/§10.
