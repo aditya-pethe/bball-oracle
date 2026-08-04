@@ -96,12 +96,13 @@ Pages/routes for MVP:
 | `/signin` | NextAuth sign-in flow. |
 | `/sandbox` | Core product: schema browser (tables/columns for `pbp_event`, `shot_detail`), SQL editor, run button, results table, query history, example/starter queries. |
 
-Sandbox components:
-- **SQL editor:** CodeMirror 6 with SQL language mode (lighter weight than Monaco; sufficient for this use case).
-- **Schema browser:** sidebar listing available tables + columns/types, so users aren't guessing at schema.
-- **Results table:** paginated/virtualized for large result sets, clear messaging on truncation/timeout/errors.
-- **Query history:** persisted per user (backed by `app.query_log` or a dedicated table) — also useful as an abuse audit trail (§5).
-- **Example queries:** a small set of starter queries (e.g. "top scorers in a game," "made shots by zone for a player") — important since a blank SQL box against unfamiliar event-grain data is an empty-state problem.
+Sandbox components (implementation decisions from Phase 2 planning in parentheses):
+- **SQL editor:** CodeMirror 6 with SQL language mode (lighter weight than Monaco; sufficient for this use case). (`@codemirror/lang-sql`, PostgreSQL dialect, schema-aware autocomplete fed from `/api/schema`.)
+- **Schema browser:** sidebar listing available tables + columns/types, so users aren't guessing at schema. (Sourced live from a session-gated `/api/schema` endpoint that queries `information_schema` through the `sandbox_ro` pool — the browser shows exactly what the role can actually read, never a hand-maintained list.)
+- **Results table:** clear messaging on truncation/timeout/errors. (Plain table, no virtualization — the server's 1,000-row cap makes a grid library speculative; revisit only on measured jank.)
+- **Query history:** persisted per user — also useful as an abuse audit trail (§5). (Backed directly by `app.query_log` via a gated `/api/history` endpoint, own rows only; no dedicated table.)
+- **Example queries:** a small set of starter queries (e.g. "top scorers in a game," "made shots by zone for a player") — important since a blank SQL box against unfamiliar event-grain data is an empty-state problem. (Static list in code, each verified against live data.)
+- **Styling:** Tailwind CSS v4, no component library (decided at Phase 2 planning; deliberately deferred out of Phase 1).
 
 ## 7. Data Pipeline (Python)
 
