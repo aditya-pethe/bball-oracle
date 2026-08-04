@@ -37,7 +37,7 @@ export default async function RootLayout({
             href="/"
             className="flex items-center gap-2 font-mono text-sm font-semibold text-ink"
           >
-            <Image src="/logo.png" alt="" width={22} height={22} />
+            <Image src="/logo.png" alt="" width={30} height={30} />
             bball-oracle
           </Link>
           {user && (

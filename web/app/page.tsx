@@ -23,7 +23,7 @@ export default async function Home() {
     <div className="flex flex-1 flex-col items-center px-4 py-14">
       <div className="w-full max-w-3xl">
         <h1 className="flex items-center gap-3 font-mono text-4xl font-semibold tracking-tight">
-          <Image src="/logo.png" alt="" width={48} height={48} />
+          <Image src="/logo.png" alt="" width={72} height={72} />
           bball-oracle
         </h1>
         <p className="mt-4 max-w-xl text-lg text-ink-muted">
