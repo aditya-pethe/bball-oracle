@@ -97,12 +97,12 @@ Pages/routes for MVP:
 | `/sandbox` | Core product: schema browser (tables/columns for `pbp_event`, `shot_detail`), SQL editor, run button, results table, query history, example/starter queries. |
 
 Sandbox components (implementation decisions from Phase 2 planning in parentheses):
-- **SQL editor:** CodeMirror 6 with SQL language mode (lighter weight than Monaco; sufficient for this use case). (`@codemirror/lang-sql`, PostgreSQL dialect, schema-aware autocomplete fed from `/api/schema`.)
+- **SQL editor:** CodeMirror 6 with SQL language mode (lighter weight than Monaco; sufficient for this use case). (Via `@uiw/react-codemirror` + `@codemirror/lang-sql`, PostgreSQL dialect, schema-aware autocomplete fed from `/api/schema`.)
 - **Schema browser:** sidebar listing available tables + columns/types, so users aren't guessing at schema. (Sourced live from a session-gated `/api/schema` endpoint that queries `information_schema` through the `sandbox_ro` pool — the browser shows exactly what the role can actually read, never a hand-maintained list.)
-- **Results table:** clear messaging on truncation/timeout/errors. (Plain table, no virtualization — the server's 1,000-row cap makes a grid library speculative; revisit only on measured jank.)
+- **Results table:** clear messaging on truncation/timeout/errors. (Headless TanStack Table — full styling control for a later design pass, unlike batteries-included grids; no virtualization at the server's 1,000-row cap unless measured jank. Rendered as a swappable "result view" so a future chart view over the same query results is additive.)
 - **Query history:** persisted per user — also useful as an abuse audit trail (§5). (Backed directly by `app.query_log` via a gated `/api/history` endpoint, own rows only; no dedicated table.)
 - **Example queries:** a small set of starter queries (e.g. "top scorers in a game," "made shots by zone for a player") — important since a blank SQL box against unfamiliar event-grain data is an empty-state problem. (Static list in code, each verified against live data.)
-- **Styling:** Tailwind CSS v4, no component library (decided at Phase 2 planning; deliberately deferred out of Phase 1).
+- **Styling:** Tailwind CSS v4 with a semantic design-token layer, no component library (decided at Phase 2 planning; deliberately deferred out of Phase 1). A dedicated visual-design pass happens after the sandbox works — components stay headless and token-styled so restyling is a token/class edit, not rework.
 
 ## 7. Data Pipeline (Python)
 
