@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import { useImperativeHandle, useMemo, useRef, type Ref } from "react";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import type { SchemaTable } from "../lib/api-types";
 
 const MAX_QUERY_CHARS = 20_000;
+
+export type SqlEditorHandle = {
+  insertAtCursor: (text: string) => void;
+};
 
 type Props = {
   value: string;
@@ -13,9 +17,21 @@ type Props = {
   onRun: () => void;
   disabled: boolean;
   schema: SchemaTable[];
+  ref?: Ref<SqlEditorHandle>;
 };
 
-export default function SqlEditor({ value, onChange, onRun, disabled, schema }: Props) {
+export default function SqlEditor({ value, onChange, onRun, disabled, schema, ref }: Props) {
+  const cmRef = useRef<ReactCodeMirrorRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    insertAtCursor(text: string) {
+      const view = cmRef.current?.view;
+      if (!view) return;
+      view.dispatch(view.state.replaceSelection(text));
+      view.focus();
+    },
+  }));
+
   const extensions = useMemo(
     () => [
       sql({
@@ -32,7 +48,7 @@ export default function SqlEditor({ value, onChange, onRun, disabled, schema }: 
   );
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div
         className="min-h-0 flex-1 overflow-auto rounded-panel border border-edge"
         // Capture phase so CodeMirror's own Mod-Enter binding (insert blank line)
@@ -47,12 +63,14 @@ export default function SqlEditor({ value, onChange, onRun, disabled, schema }: 
         }}
       >
         <CodeMirror
+          ref={cmRef}
           value={value}
           onChange={onChange}
           extensions={extensions}
           theme="dark"
+          height="100%"
           placeholder="SELECT ... FROM nba.pbp_event"
-          style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}
+          style={{ fontFamily: "var(--font-mono)", fontSize: "13px", height: "100%" }}
         />
       </div>
       {value.length > MAX_QUERY_CHARS && (
