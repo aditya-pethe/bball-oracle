@@ -12,3 +12,6 @@ __pycache__/
 .cache/
 .vercel/
 .playwright-mcp/
+
+# Agent-tool worktrees (created/removed by the harness, never committed)
+.claude/worktrees/
