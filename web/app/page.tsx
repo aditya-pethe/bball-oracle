@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { auth } from "../auth";
 
@@ -21,7 +22,8 @@ export default async function Home() {
   return (
     <div className="flex flex-1 flex-col items-center px-4 py-14">
       <div className="w-full max-w-3xl">
-        <h1 className="font-mono text-4xl font-semibold tracking-tight">
+        <h1 className="flex items-center gap-3 font-mono text-4xl font-semibold tracking-tight">
+          <Image src="/logo.png" alt="" width={48} height={48} />
           bball-oracle
         </h1>
         <p className="mt-4 max-w-xl text-lg text-ink-muted">
