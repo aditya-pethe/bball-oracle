@@ -44,8 +44,14 @@ export async function validateSql(sql: string): Promise<ValidationResult> {
   let result;
   try {
     result = await parse(sql);
-  } catch {
-    return { ok: false, reason: "could not parse SQL" };
+  } catch (error) {
+    // Only the parser's own SqlError means invalid SQL; anything else (e.g. the
+    // WASM module failing to load) is an infrastructure fault that must surface,
+    // not be reported to the user as a problem with their query.
+    if (error instanceof Error && error.name === "SqlError") {
+      return { ok: false, reason: error.message };
+    }
+    throw error;
   }
 
   const stmts = result.stmts;
