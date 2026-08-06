@@ -1,0 +1,372 @@
+# Text-to-SQL eval set v0 — seed cases, PENDING HUMAN REVIEW
+#
+# Written before the agent exists (eval-first, the TDD analog for a
+# nondeterministic system). Every `gold_sql` here has been executed against the
+# live 2023-24 dataset through `sandbox_ro` and returns rows — but the QUESTIONS
+# and the EXPECTED BEHAVIOR are proposals for Aditya to vet, not settled truth.
+#
+# Scoring model:
+#   expects: answer  -> execution accuracy. Run gold_sql and the agent's SQL,
+#                       compare result sets (ignore column names; ignore row
+#                       order unless order_matters: true; float tolerance 1e-6).
+#   expects: clarify -> agent must ask a clarifying question BEFORE running SQL.
+#                       Judged against `rubric`.
+#   expects: decline -> agent must state the data cannot answer this. Judged
+#                       against `rubric`. Inventing an answer is the worst
+#                       possible outcome and should be weighted as such.
+#
+# Tiers: 1 simple | 2 group/filter | 3 event-semantics & windows
+#        4 ambiguous (clarify) | 5 unanswerable (decline)
+#
+# Dataset facts these cases depend on:
+#   - ONLY the 2023-24 regular season is loaded (season=2023, season_type='regular')
+#   - nba.shot_detail: field goals only — NO free throws
+#   - nba.pbp_event: eventmsgtype 1=made FG, 2=missed FG, 3=free throw,
+#     4=rebound, 5=turnover, 6=foul. On a made FG, player2_name is the assister.
+#     Missed free throws have descriptions starting with 'MISS'.
+#   - No player biographical data, no awards, no salaries, no standings table.
+
+cases:
+  # ---------- Tier 1: simple ----------
+  - id: t1-total-shots
+    tier: 1
+    question: How many shots were attempted in the dataset?
+    expects: answer
+    gold_sql: |
+      SELECT COUNT(*) AS shots FROM nba.shot_detail
+
+  - id: t1-game-count
+    tier: 1
+    question: How many games are covered by this data?
+    expects: answer
+    gold_sql: |
+      SELECT COUNT(DISTINCT game_id) AS games FROM nba.shot_detail
+
+  - id: t1-common-zone
+    tier: 1
+    question: What is the most common shot zone?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT shot_zone_basic, COUNT(*) AS attempts
+      FROM nba.shot_detail
+      GROUP BY shot_zone_basic
+      ORDER BY attempts DESC
+      LIMIT 1
+
+  - id: t1-made-threes
+    tier: 1
+    question: How many three-pointers were made all season?
+    expects: answer
+    gold_sql: |
+      SELECT COUNT(*) AS made_threes
+      FROM nba.shot_detail
+      WHERE shot_type = '3PT Field Goal' AND shot_made_flag = 1
+
+  - id: t1-curry-attempts
+    tier: 1
+    question: How many shots did Stephen Curry attempt?
+    expects: answer
+    gold_sql: |
+      SELECT COUNT(*) AS attempts
+      FROM nba.shot_detail
+      WHERE player_name = 'Stephen Curry'
+
+  # ---------- Tier 2: grouping / filtering ----------
+  - id: t2-attempt-leaders
+    tier: 2
+    question: Which 10 players attempted the most shots?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT player_name, COUNT(*) AS attempts
+      FROM nba.shot_detail
+      GROUP BY player_name
+      ORDER BY attempts DESC
+      LIMIT 10
+
+  - id: t2-jokic-by-zone
+    tier: 2
+    question: What is Nikola Jokic's field goal percentage by shot zone?
+    expects: answer
+    gold_sql: |
+      SELECT shot_zone_basic,
+             COUNT(*) AS attempts,
+             ROUND(AVG(shot_made_flag) * 100, 1) AS fg_pct
+      FROM nba.shot_detail
+      WHERE player_name = 'Nikola Jokic'
+      GROUP BY shot_zone_basic
+
+  - id: t2-team-most-threes
+    tier: 2
+    question: Which team attempted the most three-pointers?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT team_name, COUNT(*) AS three_attempts
+      FROM nba.shot_detail
+      WHERE shot_type = '3PT Field Goal'
+      GROUP BY team_name
+      ORDER BY three_attempts DESC
+      LIMIT 1
+
+  - id: t2-shots-by-period
+    tier: 2
+    question: How many shots were taken in each period?
+    expects: answer
+    gold_sql: |
+      SELECT period, COUNT(*) AS attempts
+      FROM nba.shot_detail
+      GROUP BY period
+
+  - id: t2-best-three-pt-shooters
+    tier: 2
+    question: >
+      Who had the best three-point percentage among players with at least 200
+      three-point attempts?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT player_name,
+             COUNT(*) AS attempts,
+             ROUND(AVG(shot_made_flag) * 100, 1) AS three_pct
+      FROM nba.shot_detail
+      WHERE shot_type = '3PT Field Goal'
+      GROUP BY player_name
+      HAVING COUNT(*) >= 200
+      ORDER BY three_pct DESC
+      LIMIT 10
+
+  - id: t2-deepest-make
+    tier: 2
+    question: What was the longest made shot of the season?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT player_name, shot_distance, game_date
+      FROM nba.shot_detail
+      WHERE shot_made_flag = 1
+      ORDER BY shot_distance DESC
+      LIMIT 1
+
+  # ---------- Tier 3: event semantics, joins, windows ----------
+  - id: t3-assist-leaders
+    tier: 3
+    question: Who recorded the most assists?
+    expects: answer
+    order_matters: true
+    notes: >
+      Requires knowing assists live in pbp_event, not shot_detail: on a made
+      field goal (eventmsgtype = 1) player2_name is the assisting player. An
+      agent that looks only at shot_detail cannot answer this at all.
+    gold_sql: |
+      SELECT player2_name AS player_name, COUNT(*) AS assists
+      FROM nba.pbp_event
+      WHERE eventmsgtype = 1
+        AND player2_name IS NOT NULL
+        AND player2_name <> ''
+      GROUP BY player2_name
+      ORDER BY assists DESC
+      LIMIT 10
+
+  - id: t3-turnover-leaders
+    tier: 3
+    question: Which players committed the most turnovers?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT player1_name AS player_name, COUNT(*) AS turnovers
+      FROM nba.pbp_event
+      WHERE eventmsgtype = 5
+        AND player1_name IS NOT NULL
+        AND player1_name <> ''
+      GROUP BY player1_name
+      ORDER BY turnovers DESC
+      LIMIT 10
+
+  - id: t3-free-throw-pct
+    tier: 3
+    question: >
+      What was the free throw percentage for players who took at least 300 free
+      throws?
+    expects: answer
+    order_matters: true
+    notes: >
+      Free throws exist ONLY in pbp_event (eventmsgtype = 3); misses are
+      identified by a description beginning with 'MISS'. shot_detail contains no
+      free throws at all.
+    gold_sql: |
+      SELECT player1_name AS player_name,
+             COUNT(*) AS attempts,
+             ROUND(AVG(CASE WHEN COALESCE(homedescription, visitordescription, neutraldescription)
+                              LIKE 'MISS%' THEN 0 ELSE 1 END) * 100, 1) AS ft_pct
+      FROM nba.pbp_event
+      WHERE eventmsgtype = 3
+        AND player1_name IS NOT NULL
+        AND player1_name <> ''
+      GROUP BY player1_name
+      HAVING COUNT(*) >= 300
+      ORDER BY ft_pct DESC
+      LIMIT 10
+
+  - id: t3-clutch-three-pct
+    tier: 3
+    question: >
+      What was the three-point percentage on shots taken in the final two
+      minutes of the fourth quarter?
+    expects: answer
+    gold_sql: |
+      SELECT COUNT(*) AS attempts,
+             ROUND(AVG(shot_made_flag) * 100, 1) AS three_pct
+      FROM nba.shot_detail
+      WHERE shot_type = '3PT Field Goal'
+        AND period = 4
+        AND minutes_remaining < 2
+
+  - id: t3-corner-three-rate
+    tier: 3
+    question: >
+      Which teams took the highest share of their three-pointers from the
+      corners?
+    expects: answer
+    order_matters: true
+    gold_sql: |
+      SELECT team_name,
+             COUNT(*) AS three_attempts,
+             ROUND(AVG(CASE WHEN shot_zone_basic IN ('Left Corner 3', 'Right Corner 3')
+                            THEN 1 ELSE 0 END) * 100, 1) AS corner_share
+      FROM nba.shot_detail
+      WHERE shot_type = '3PT Field Goal'
+      GROUP BY team_name
+      ORDER BY corner_share DESC
+      LIMIT 10
+
+  - id: t3-scoring-leaders-TRAP
+    tier: 3
+    question: Who scored the most points this season?
+    expects: answer
+    order_matters: true
+    trap: true
+    notes: >
+      THE flagship valid-but-wrong case. Points = field goals (2 or 3 each, from
+      shot_detail) PLUS made free throws (pbp_event, eventmsgtype = 3, no 'MISS'
+      prefix). An agent that computes points from shot_detail alone produces a
+      leaderboard that runs cleanly, looks authoritative, and is wrong — it
+      silently drops every free throw. The repo's own example query
+      ("Top scorers by made field goals") makes exactly this mistake, which is
+      why it is deliberately titled "by made field goals" rather than "points".
+      Execution accuracy catches this automatically: the totals differ by
+      hundreds of points per player. Accepting a clarifying question here is
+      also reasonable — vet whether `clarify` should be an allowed outcome.
+    gold_sql: |
+      WITH fg AS (
+        SELECT player_name,
+               SUM(CASE WHEN shot_type = '3PT Field Goal' THEN 3 ELSE 2 END) AS pts
+        FROM nba.shot_detail
+        WHERE shot_made_flag = 1
+        GROUP BY player_name
+      ),
+      ft AS (
+        SELECT player1_name AS player_name, COUNT(*) AS pts
+        FROM nba.pbp_event
+        WHERE eventmsgtype = 3
+          AND COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%'
+          AND player1_name IS NOT NULL
+          AND player1_name <> ''
+        GROUP BY player1_name
+      )
+      SELECT COALESCE(fg.player_name, ft.player_name) AS player_name,
+             COALESCE(fg.pts, 0) + COALESCE(ft.pts, 0) AS points
+      FROM fg FULL OUTER JOIN ft ON fg.player_name = ft.player_name
+      ORDER BY points DESC
+      LIMIT 10
+
+  # ---------- Tier 4: ambiguous — should clarify before running SQL ----------
+  - id: t4-best-shooters
+    tier: 4
+    question: Who are the best shooters in the league?
+    expects: clarify
+    gold_sql: null
+    rubric: >
+      "Best" is undefined along at least two axes: efficiency vs volume, and
+      overall FG% vs three-point%. A minimum-attempts threshold is also required
+      or the leaderboard fills with players who went 1-for-1. PASS if the agent
+      asks which definition to use, or proposes one explicitly and states the
+      threshold it chose. FAIL if it silently emits an unqualified leaderboard.
+
+  - id: t4-most-clutch
+    tier: 4
+    question: Who was the most clutch player?
+    expects: clarify
+    gold_sql: null
+    rubric: >
+      "Clutch" has no canonical definition in this schema. PASS if the agent
+      asks for, or explicitly states, a definition (time remaining, score
+      margin, and the metric being measured). FAIL if it silently invents one
+      and presents the result as settled.
+
+  - id: t4-improved-most
+    tier: 4
+    question: Which player improved the most?
+    expects: clarify
+    gold_sql: null
+    rubric: >
+      Improvement requires two time periods to compare, and only one season is
+      loaded. PASS if the agent either asks what comparison is intended, or
+      notes that only 2023-24 is available and offers a within-season split
+      (e.g. first half vs second half). FAIL if it reports cross-season
+      improvement, which the data cannot support.
+
+  # ---------- Tier 5: unanswerable — should decline ----------
+  - id: t5-playoffs
+    tier: 5
+    question: How did Jayson Tatum perform in the 2024 playoffs?
+    expects: decline
+    gold_sql: null
+    rubric: >
+      Only the 2023-24 REGULAR season is loaded (season_type = 'regular'). PASS
+      if the agent states that playoff data is not available. FAIL if it returns
+      regular-season numbers labeled as playoffs, or returns an empty result
+      without explaining why.
+
+  - id: t5-prior-season
+    tier: 5
+    question: Compare LeBron James's shooting in 2019 to this season.
+    expects: decline
+    gold_sql: null
+    rubric: >
+      Only 2023-24 is loaded. PASS if the agent says the 2019 season is not in
+      the dataset. FAIL if it fabricates a comparison or silently answers for
+      2023-24 only without flagging the missing half.
+
+  - id: t5-player-height
+    tier: 5
+    question: Which players taller than seven feet took the most shots?
+    expects: decline
+    gold_sql: null
+    rubric: >
+      No player biographical data exists — no height, weight, age, or position.
+      PASS if the agent says height is unavailable. FAIL if it guesses at tall
+      players from name knowledge, which would be model recall rather than a
+      result from the data.
+
+  - id: t5-awards
+    tier: 5
+    question: Who won MVP?
+    expects: decline
+    gold_sql: null
+    rubric: >
+      No awards data. PASS if the agent declines, optionally offering a
+      statistical proxy while making clear the proxy is not the award. FAIL if
+      it answers from model knowledge — the answer may even be correct, which
+      makes it more dangerous, not less: it teaches the user the tool knows
+      things it cannot actually source.
+
+  - id: t5-salary
+    tier: 5
+    question: What is the highest-paid player in the dataset?
+    expects: decline
+    gold_sql: null
+    rubric: >
+      No salary data. PASS if the agent declines. FAIL if it answers from model
+      knowledge.
