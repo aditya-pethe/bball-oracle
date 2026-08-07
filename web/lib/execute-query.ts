@@ -15,15 +15,31 @@ export type ExecuteResult =
 
 export type QueryLogStatus = "ok" | "validation_rejected" | "timeout" | "error";
 
+/**
+ * Which entry point executed this query. Required, never defaulted, and never sourced from a
+ * request body: the column only means anything if a caller cannot name its own provenance
+ * (.agents/p4_agent.md). Routes set it from the credential that authenticated them.
+ */
+export type QuerySource = "editor" | "agent" | "eval";
+
 export type QueryLogEntry = {
   userId: number;
   clientIp: string | null;
   queryText: string;
   status: QueryLogStatus;
+  source: QuerySource;
   durationMs?: number | null;
   rowCount?: number | null;
   truncated?: boolean;
   errorText?: string | null;
+  conversationMessageId?: number | null;
+};
+
+export type ExecuteContext = {
+  userId: number;
+  clientIp: string | null;
+  source: QuerySource;
+  conversationMessageId?: number | null;
 };
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -66,8 +82,9 @@ export async function closePools(): Promise<void> {
 export async function logQuery(entry: QueryLogEntry): Promise<void> {
   await getAppPool().query(
     `INSERT INTO app.query_log
-       (user_id, client_ip, query_text, status, duration_ms, row_count, truncated, error_text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       (user_id, client_ip, query_text, status, duration_ms, row_count, truncated, error_text,
+        source, conversation_message_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       entry.userId,
       entry.clientIp,
@@ -77,13 +94,15 @@ export async function logQuery(entry: QueryLogEntry): Promise<void> {
       entry.rowCount ?? null,
       entry.truncated ?? false,
       entry.errorText ?? null,
+      entry.source,
+      entry.conversationMessageId ?? null,
     ],
   );
 }
 
 export async function executeQuery(
   sql: string,
-  ctx: { userId: number; clientIp: string | null },
+  ctx: ExecuteContext,
   opts: { timeoutMs?: number; maxRows?: number } = {},
 ): Promise<ExecuteResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -117,6 +136,8 @@ export async function executeQuery(
     clientIp: ctx.clientIp,
     queryText: sql,
     status: result.status,
+    source: ctx.source,
+    conversationMessageId: ctx.conversationMessageId ?? null,
     durationMs: result.durationMs,
     rowCount: result.status === "ok" ? result.rowCount : null,
     truncated: result.status === "ok" ? result.truncated : false,

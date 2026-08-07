@@ -2,7 +2,8 @@
 
 ## Critical rules (non-negotiable)
 - ALWAYS treat `project_plan.md` as the PRD. If a task requires deviating from it, update `project_plan.md` in the same change — never drift silently.
-- ALWAYS gate `/api/query` behind a valid NextAuth session. NEVER add an anonymous execution path, even for local testing convenience.
+- ALWAYS gate `/api/query` behind a valid NextAuth session. NEVER add an anonymous execution path, even for local testing convenience. Phase 4 added a **second door**, `/api/internal/query`, for the agent service and eval harness: it is service-token-gated AND requires an explicit `userId` verified against `app.users`, so it is authenticated and user-attributed, never anonymous. The Python service's own `POST /agent` carries the same obligation and is token-gated too — an unauthenticated agent endpoint is an anonymous execution path wearing a costume, since the service holds a token that opens the internal door.
+- ALWAYS set `query_log.source` from the credential that authenticated the request, NEVER from the request body. A caller that can label its own provenance can launder it, which destroys the one question the column exists to answer.
 - ALWAYS execute user SQL through the restricted `sandbox_ro` Postgres role (SELECT-only on `nba.pbp_event`, `nba.shot_detail`; no access to the `app` schema). Application-level SQL validation is defense in depth ONLY — never treat it as the security boundary.
 - ALWAYS enforce statement timeout, row cap, and query-log write together on every query execution path. NEVER ship a code path that skips one of the three.
 - NEVER add monetization (ads, paid tiers, reselling data/API access) without first revisiting `project_plan.md` §9 (data licensing).
@@ -18,6 +19,8 @@ Phase 1 (query API) complete and merged to `main`: Next.js 16 app in `web/`; mig
 Phase 2 (sandbox UI) complete and merged to `main`: Tailwind v4 with a semantic `@theme` token layer (restyling = token/class edits only); styled `/signin`, session-aware `/` stub, server-guarded `/sandbox` (CSR client component, no middleware); session-gated `GET /api/schema` (via `sandbox_ro`, so visibility provably equals grants) and `GET /api/history` (own `app.query_log` rows, LIMIT 50); CodeMirror 6 editor (`@uiw/react-codemirror`, PostgreSQL dialect, schema autocomplete, Cmd/Ctrl+Enter), headless TanStack results table behind a swappable result-view seam, distinct UI states for validation/SQL-error/timeout/rate-limit, 8 example queries verified against the live season, and localStorage editor persistence. All suites green (web 127, grants 90, ETL 27); full flow (sign-out → guard redirect → GitHub sign-in → schema/autocomplete → run → rejection → history) E2E-verified locally and on `https://bball-oracle.vercel.app`. Second-user history isolation is asserted at the API-test level (two-user vitest case), not browser-E2E'd (single GitHub account).
 
 Phase 3 (landing page, attribution, design pass) complete and merged to `main`: real landing page on `/` (pitch, live coverage numbers, verified example teaser with hardcoded real results, session-aware CTA), layout-level attribution/disclaimer footer on every page (satisfies `project_plan.md` §9's attribution requirement), token-value refinements + global focus-visible ring, real page metadata. MVP is feature-complete per `project_plan.md` §12; remaining known follow-up: wire the Vercel git integration via dashboard (deploys are still CLI `npx vercel deploy --prod`).
+
+Phase 4 (agent foundation) built on `feat/p4-agent-foundation`, **not yet merged**: migration `0004` applied to the live project (`app.conversation`, `app.conversation_message`, `query_log.source` + `conversation_message_id`); the Phase 1 safety chain extracted into `web/lib/run-user-sql.ts` and exposed through a second, service-token-gated door at `/api/internal/query`; a Python FastAPI + LangGraph agent service in `agent/`; an eval harness in `evals/`; and the Agent tab in `web/components/`. The full loop is verified end-to-end locally (browser-less: `POST /agent` → graph → `/api/internal/query` → `sandbox_ro` → live data, landing in `query_log` with `source='agent'`). **Not deployed** — the Python service has no Fly app yet, and the Vercel env vars (`AGENT_SERVICE_URL`, `AGENT_SERVICE_TOKEN`) are unset, so the Agent tab is non-functional in production. Zero-shot baseline of record: 64.7% execution accuracy, 100% abstention precision (`evals/runs/`); the LangGraph agent itself is **unmeasured** — see `.agents/p4_agent.md`.
 
 ## Permission mode
 Claude Code defaults to `auto` mode in this project (`.claude/settings.json`, `permissions.defaultMode: "auto"`) — this applies to the main session and to subagents spawned here via the Agent/Task tool. If you're a different AGENTS.md-compatible tool (Cursor, Aider, Codex, etc.), this setting doesn't apply to you — configure your own auto/approval mode separately; there's no single file that controls it across tools.
@@ -106,12 +109,29 @@ NBA_PIPELINE_DATABASE_URL=postgresql://... .venv/bin/python -m pipeline.cli \
 BBALL_TEST_ADMIN_DSN=postgresql://postgres@127.0.0.1:5432/postgres .venv/bin/pytest db/tests
 ```
 
+Agent service + eval harness (Phase 4), from repo root:
+```
+.venv/bin/pip install -r agent/requirements.txt -r evals/requirements.txt
+
+# Both suites are offline: no API key, no database, safe in CI.
+.venv/bin/python -m pytest agent/tests evals/tests
+
+# Run the service locally (needs ANTHROPIC_API_KEY, AGENT_SERVICE_TOKEN, and
+# AGENT_API_BASE_URL pointing at a running Next app):
+.venv/bin/python -m uvicorn agent.service:app --port 8080
+
+# Eval run — COSTS MONEY (~$0.11), hits live data, never in CI:
+.venv/bin/python -m evals.run --agent baseline
+```
+
 ## File organization
 - `db/migrations/NNNN_name.sql` — versioned SQL migrations, applied by hand via Supabase MCP (`apply_migration`), reviewed before applying. `0001` creates schema `nba` (`pbp_event`, `shot_detail`); `0002` creates the `sandbox_ro` role and its grants; `0003` creates schema `app` (NextAuth adapter tables, `query_log`) and the `app_rw` role (table-scoped DML on `app` only, `query_log` append-only).
 - `web/` — the Next.js app. `web/lib/` holds the safety chain as separate tested modules: `validate-sql.ts` (pure libpg-query AST validator — defense in depth, NOT the boundary), `execute-query.ts` (`sandbox_ro` execution wrapper + query logging), `rate-limit.ts` (sliding window over `app.query_log`), `require-session.ts` (the only auth gate); `web/app/api/query/route.ts` composes them, and `web/app/api/schema|history/route.ts` are gated reads that never touch the executor/logger/rate limiter. `web/lib/test-cluster.ts` is the vitest globalSetup that builds the disposable Postgres (applies all of `db/migrations/`). `web/lib/api-types.ts` is the client/server response contract; `web/lib/examples.ts` the verified example queries. `web/components/` holds the sandbox UI: `Sandbox.tsx` (the one client component that owns state + all fetches) composing pure props-in/callbacks-out children (`SqlEditor`, `SchemaBrowser`, `ExampleList`, `HistoryPanel`, `ResultsArea` → `TableView`); components style via semantic tokens only and never import server-only modules (pools/executor) — that's the server/client boundary, enforce in review.
 - `db/tests/` — pytest/psycopg2 suite asserting on `sandbox_ro`'s actual grants (not application behavior) against a disposable local Postgres. Lives next to `db/migrations/` rather than the repo-root `tests/` since it's testing the data layer, not the pipeline.
 - `pipeline/` — the Python ETL package (config, download, transform, load, CLI). `pipeline/seasons.yaml` is the season-coverage config; editing it and rerunning is the entire backfill mechanism, no code changes.
 - `tests/` — pytest suite for the ETL pipeline (parse/clean edge cases, load/idempotency), fixtures built from real downloaded sample data, not invented.
+- `agent/` — the deployed Python service (FastAPI + LangGraph). `graph.py` owns the edges and bounded-retry caps; `nodes/` one module per node; `execute.py` reaches SQL ONLY via HTTP to `/api/internal/query`; `envelope.py` is the single home for the agent's result types. **`agent/` must never import `evals/`** — the container ships only `agent/`, and the dependency runs the other way (the harness measures the agent). `agent/tests/test_no_eval_dependency.py` enforces this, along with the invariant that the service imports no Postgres driver: it holds an LLM key and a service token, never a DSN.
+- `evals/` — the eval harness. `harness/comparator.py` is the definition of "correct" (execution accuracy: ignore column names, ignore row order unless `order_matters`, multiset semantics, 1e-6 float tolerance) and is unit-tested on synthetic fixtures so it runs in CI. `harness/runner.py` and `run.py` need live data and an API key, cost money, and must NEVER run in CI. `text2sql-v0.yaml` is the case set; `runs/` holds stored runs so results can be diffed across changes.
 - `.agents/` — gitignored scratch space; each phase's investigation/design decision logs live here (e.g. `p0_source_investigation.md`, `p0_schema_design.md`, `p0_sandbox_ro_design.md`, `p0_etl_design.md`) as reasoning context for later tasks, not as product docs.
 
 ## Verification

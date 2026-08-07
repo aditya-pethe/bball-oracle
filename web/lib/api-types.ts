@@ -37,3 +37,47 @@ export type HistoryEntry = {
   truncated: boolean;
 };
 export type HistoryResponse = { queries: HistoryEntry[] };
+
+// ---------------------------------------------------------------------------
+// Agent tab (Phase 4). These mirror evals/harness/envelope.py field for field -- the same
+// envelope is what the UI renders and what the eval harness scores, so the shape is defined
+// once and both consumers agree by construction. Changing one without the other is a bug.
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately independent of whether `sql` is present: an agent that asks a clarifying
+ * question *and* emits speculative SQL has still clarified, and one that declines while
+ * quietly returning rows has not.
+ */
+export type AgentOutcome = "answer" | "clarify" | "decline";
+
+export type AgentEnvelope = {
+  outcome: AgentOutcome;
+  summary: string;
+  /** Always disclosed, never hidden — the agent drafts SQL, the user stays the judge. */
+  sql: string | null;
+  /**
+   * QueryResult is the universal result contract: the same shape /api/query returns and the
+   * same one ResultsArea/TableView already render, failures included.
+   *
+   * When persisted into app.conversation_message this is a PREVIEW (<= 50 rows), never the
+   * full 1000-row result — see db/migrations/0004. Full results are re-executed on demand.
+   */
+  result: QueryResult | null;
+  error: string | null;
+};
+
+export type Conversation = {
+  id: number;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** One turn. Discriminated on `role` because the two roles carry different payloads. */
+export type AgentMessage =
+  | { id: number; role: "user"; createdAt: string; text: string }
+  | { id: number; role: "assistant"; createdAt: string; envelope: AgentEnvelope };
+
+export type ConversationListResponse = { conversations: Conversation[] };
+export type ConversationResponse = { conversation: Conversation; messages: AgentMessage[] };

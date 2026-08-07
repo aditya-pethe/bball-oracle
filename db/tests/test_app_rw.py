@@ -14,6 +14,9 @@ from conftest import APP_RW_ROLE, LATE_APP_TABLE
 from test_sandbox_ro import NBA_TABLES, denied
 
 AUTH_TABLES = ["app.users", "app.accounts", "app.sessions", "app.verification_token"]
+# Added by 0004. Ordinary application state, so app_rw gets the same full DML as the auth
+# tables -- users rename and delete their own threads.
+CONVERSATION_TABLES = ["app.conversation", "app.conversation_message"]
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +60,102 @@ def test_can_insert_and_read_query_log(rw):
         log_id = cur.fetchone()[0]
         cur.execute("SELECT status FROM app.query_log WHERE id = %s", (log_id,))
         assert cur.fetchone()[0] == "validation_rejected"
+
+
+def test_full_dml_on_conversation_tables(rw):
+    """One pass through the agent tab's lifecycle: start a thread, add a turn, rename, delete."""
+    with rw.cursor() as cur:
+        cur.execute("INSERT INTO app.users (name) VALUES ('conv') RETURNING id")
+        user_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO app.conversation (user_id, title) VALUES (%s, 'draft') RETURNING id",
+            (user_id,),
+        )
+        conversation_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO app.conversation_message (conversation_id, role, content) "
+            "VALUES (%s, 'user', '{\"text\": \"who scored the most points?\"}') RETURNING id",
+            (conversation_id,),
+        )
+        message_id = cur.fetchone()[0]
+        cur.execute(
+            "UPDATE app.conversation SET title = 'scoring leaders', updated_at = now() "
+            "WHERE id = %s",
+            (conversation_id,),
+        )
+        cur.execute("SELECT title FROM app.conversation WHERE id = %s", (conversation_id,))
+        assert cur.fetchone()[0] == "scoring leaders"
+
+        cur.execute("DELETE FROM app.conversation WHERE id = %s", (conversation_id,))
+        cur.execute(
+            "SELECT count(*) FROM app.conversation_message WHERE id = %s", (message_id,)
+        )
+        assert cur.fetchone()[0] == 0, "ON DELETE CASCADE did not clear the message"
+        cur.execute("DELETE FROM app.users WHERE id = %s", (user_id,))
+
+
+def test_query_log_links_to_a_message_and_survives_its_deletion(rw):
+    """0004's ON DELETE SET NULL: the audit row outlives the conversation that caused it."""
+    with rw.cursor() as cur:
+        cur.execute("INSERT INTO app.users (name) VALUES ('conv-link') RETURNING id")
+        user_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO app.conversation (user_id) VALUES (%s) RETURNING id", (user_id,)
+        )
+        conversation_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO app.conversation_message (conversation_id, role, content) "
+            "VALUES (%s, 'assistant', '{\"outcome\": \"answer\"}') RETURNING id",
+            (conversation_id,),
+        )
+        message_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO app.query_log (user_id, query_text, status, source, "
+            "conversation_message_id) VALUES (%s, 'SELECT 1', 'ok', 'agent', %s) RETURNING id",
+            (user_id, message_id),
+        )
+        log_id = cur.fetchone()[0]
+
+        cur.execute("DELETE FROM app.conversation WHERE id = %s", (conversation_id,))
+        cur.execute(
+            "SELECT source, conversation_message_id FROM app.query_log WHERE id = %s",
+            (log_id,),
+        )
+        assert cur.fetchone() == ("agent", None)
+
+
+@pytest.mark.parametrize("source", ["editor", "agent", "eval"])
+def test_query_log_accepts_every_source_value(rw, source):
+    with rw.cursor() as cur:
+        cur.execute(
+            "INSERT INTO app.query_log (query_text, status, source) "
+            "VALUES ('SELECT 1', 'ok', %s) RETURNING source",
+            (source,),
+        )
+        assert cur.fetchone()[0] == source
+
+
+def test_query_log_rejects_an_unknown_source(rw):
+    """The CHECK constraint, not the application, is what bounds the provenance vocabulary."""
+    with rw.cursor() as cur:
+        cur.execute("BEGIN")
+        with pytest.raises(psycopg2.Error) as exc:
+            cur.execute(
+                "INSERT INTO app.query_log (query_text, status, source) "
+                "VALUES ('SELECT 1', 'ok', 'spoofed')"
+            )
+        cur.execute("ROLLBACK")
+    assert exc.value.pgcode == errorcodes.CHECK_VIOLATION
+
+
+def test_query_log_source_defaults_to_editor(rw):
+    """Phase 1-3's INSERT predates the column; it must keep working and land as editor."""
+    with rw.cursor() as cur:
+        cur.execute(
+            "INSERT INTO app.query_log (query_text, status) "
+            "VALUES ('SELECT 1', 'ok') RETURNING source"
+        )
+        assert cur.fetchone()[0] == "editor"
 
 
 def test_unqualified_names_resolve_to_app(rw):
@@ -134,7 +233,11 @@ def test_table_grants_are_exactly_the_granted_app_tables(admin):
         )
         full_dml = {"SELECT", "INSERT", "UPDATE", "DELETE"}
         expected = {
-            (table.split(".")[1], priv) for table in AUTH_TABLES for priv in full_dml
+            (table.split(".")[1], priv)
+            for table in AUTH_TABLES + CONVERSATION_TABLES
+            for priv in full_dml
+            # query_log stays append-only: SELECT + INSERT and nothing else, even though
+            # 0004 added columns to it.
         } | {("query_log", "SELECT"), ("query_log", "INSERT")}
         assert {(rel, priv) for _, rel, priv in cur.fetchall()} == expected
 
@@ -200,6 +303,12 @@ def test_role_has_no_group_memberships(admin):
 
 def test_sandbox_ro_cannot_read_the_real_auth_tables(ro):
     """0003 created the real app schema; re-pin isolation against every real table."""
-    for table in AUTH_TABLES + ["app.query_log"]:
+    for table in AUTH_TABLES + CONVERSATION_TABLES + ["app.query_log"]:
         error = denied(ro, f"SELECT * FROM {table}")
         assert "app" in str(error)
+
+
+@pytest.mark.parametrize("table", CONVERSATION_TABLES)
+def test_sandbox_ro_cannot_write_conversations(ro, table):
+    """A user's SQL must not be able to reach into anyone's conversation history."""
+    denied(ro, f"DELETE FROM {table}")
