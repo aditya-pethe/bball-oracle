@@ -94,7 +94,7 @@ Pages/routes for MVP:
 |---|---|
 | `/` | Minimal landing page: what this is, sign-in CTA. Not a marketing site. |
 | `/signin` | NextAuth sign-in flow. |
-| `/sandbox` | Core product: schema browser (tables/columns for `pbp_event`, `shot_detail`), SQL editor, run button, results table, query history, example/starter queries. |
+| `/sandbox` | Core product, two tabs. **Editor:** schema browser (tables/columns for `pbp_event`, `shot_detail`), SQL editor, run button, results table, query history, example/starter queries. **Agent** (Phase 4): ask in natural language; the agent writes and runs the SQL and answers in a message thread. |
 
 Sandbox components (implementation decisions from Phase 2 planning in parentheses):
 - **SQL editor:** CodeMirror 6 with SQL language mode (lighter weight than Monaco; sufficient for this use case). (Via `@uiw/react-codemirror` + `@codemirror/lang-sql`, PostgreSQL dialect, schema-aware autocomplete fed from `/api/schema`.)
@@ -102,6 +102,7 @@ Sandbox components (implementation decisions from Phase 2 planning in parenthese
 - **Results table:** clear messaging on truncation/timeout/errors. (Headless TanStack Table — full styling control for a later design pass, unlike batteries-included grids; no virtualization at the server's 1,000-row cap unless measured jank. Rendered as a swappable "result view" so a future chart view over the same query results is additive.)
 - **Query history:** persisted per user — also useful as an abuse audit trail (§5). (Backed directly by `app.query_log` via a gated `/api/history` endpoint, own rows only; no dedicated table.)
 - **Example queries:** a small set of starter queries (e.g. "top scorers in a game," "made shots by zone for a player") — important since a blank SQL box against unfamiliar event-grain data is an empty-state problem. (Static list in code, each verified against live data.)
+- **Agent tab (Phase 4):** a tab switch, not a split view. The message thread reuses `ResultsArea`/`TableView` unchanged to render results inline — the payoff of keeping the Phase 2 components props-in/callbacks-out. Every answer **discloses the SQL that produced it**, collapsed by default and one click from the editor: users here are SQL-capable, and the agent accelerates a first draft rather than replacing their judgment, so SQL is demoted but never hidden. Three outcomes render distinctly — `answer`, `clarify`, and `decline`; a decline is a useful response, styled as information rather than failure.
 - **Styling:** Tailwind CSS v4 with a semantic design-token layer, no component library (decided at Phase 2 planning; deliberately deferred out of Phase 1). A dedicated visual-design pass happens after the sandbox works — components stay headless and token-styled so restyling is a token/class edit, not rework.
 
 ## 7. Data Pipeline (Python)
@@ -142,8 +143,15 @@ NextAuth sign-in, schema browser, CodeMirror editor, results table, query histor
 **Phase 3 — Landing page & deploy**
 Minimal landing page, attribution/disclaimer footer, deploy to Vercel production.
 
-**Phase 4 — Post-MVP / stretch**
-Full historical backfill; precomputed aggregate tables; derived player/team lookup tables; ISR static season pages; additional sources (`matchups`, `pbpstats`) if event-level analysis demands it; NL-to-SQL agent; visualization/report builder; broader user growth.
+**Phase 4 — Agent foundation (NL-to-SQL) + eval harness** *(built, not deployed)*
+An Agent tab on `/sandbox` where users ask questions in natural language and an agent writes SQL, runs it through the **existing** safety chain, and returns a structured answer with a results table. Detailed plan and decision log: `.agents/p4_agent.md`.
+
+Architecture: a Python FastAPI + LangGraph service (`agent/`) holds the agent loop only; Next.js keeps the web app and gains `/api/agent` as a thin authenticating proxy. The service never holds a database DSN — SQL reaches Postgres solely through `/api/internal/query`, a second, service-token-gated door onto the same validator → `sandbox_ro` → timeout/row-cap → `query_log` chain. `query_log.source` (`editor` | `agent` | `eval`) records provenance and is set by the endpoint, never by the caller.
+
+Ships alongside an eval harness (`evals/`) measuring execution accuracy and, deliberately weighted, abstention — knowing when the data *cannot* answer a question. Table results only; charts are Phase 5.
+
+**Phase 5+ — Remaining post-MVP / stretch**
+Visualization suite (bar/line/scatter behind the Phase 2 result-view seam) and a basketball-court shot chart from `shot_detail`'s `loc_x`/`loc_y`; full historical backfill; precomputed aggregate tables; derived player/team lookup tables; ISR static season pages; additional sources (`matchups`, `pbpstats`) if event-level analysis demands it; broader user growth.
 
 ## 12. MVP Success Criteria
 

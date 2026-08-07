@@ -10,7 +10,12 @@ import type { TestProject } from "vitest/node";
 
 const PG_BIN = "/usr/local/bin";
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const MIGRATIONS = ["0001_create_nba_schema.sql", "0002_sandbox_ro_role.sql", "0003_app_schema.sql"];
+const MIGRATIONS = [
+  "0001_create_nba_schema.sql",
+  "0002_sandbox_ro_role.sql",
+  "0003_app_schema.sql",
+  "0004_agent_conversations.sql",
+];
 
 const TEST_DB = "bball_web_test";
 const OWNER_ROLE = "bball_test_owner";

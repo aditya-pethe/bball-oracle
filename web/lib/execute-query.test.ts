@@ -4,7 +4,9 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { closePools, executeQuery, getAppPool, getSandboxPool, logQuery } from "./execute-query";
 import { FIXTURE_ROWS, FIXTURE_USER_ID } from "./test-cluster";
 
-const CTX = { userId: FIXTURE_USER_ID, clientIp: "203.0.113.7" };
+// `source` is required on purpose: nothing can reach query_log without stating which entry
+// point it came from (migration 0004).
+const CTX = { userId: FIXTURE_USER_ID, clientIp: "203.0.113.7", source: "editor" } as const;
 
 let owner: Pool;
 
@@ -254,6 +256,7 @@ describe("logQuery", () => {
       clientIp: null,
       queryText: "DROP TABLE nba.pbp_event",
       status: "validation_rejected",
+      source: "editor",
       errorText: "only SELECT statements are allowed",
     });
 

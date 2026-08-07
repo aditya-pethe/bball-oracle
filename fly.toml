@@ -1,0 +1,75 @@
+# Fly config for the agent service (.agents/p4_agent.md, resolved 2026-08-06 #2).
+#
+# Lives at the repo root because the Docker build context is the repo root --
+# the package is imported as `agent.*` and needs its parent directory present.
+#
+# Secrets are NOT here. Set them with `fly secrets set`; see the deploy notes at
+# the bottom of this file. Nothing in this file is sensitive, which is why it is
+# committed while .env is not.
+
+app = "bball-oracle-agent"
+primary_region = "iad"   # co-located with the Vercel deployment, not with Supabase:
+                         # this service never talks to Postgres directly, only to
+                         # the Next app's /api/internal/query.
+
+[build]
+  dockerfile = "agent/Dockerfile"
+
+[env]
+  # Non-secret configuration only.
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Scale to zero. The workload is bursty (a user asks a question, then reads the
+  # answer for a minute) and a cold start costs 1-3s against a request that
+  # already takes ~6s of model time. The plan's "always-on removes cold starts"
+  # reasoning assumed the cold start was significant relative to the request; it
+  # is not, and paying for an idle machine around the clock is worse. Flip
+  # min_machines_running to 1 if measured p95 says otherwise.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  # /health touches neither the model client nor the executor, so it answers
+  # even when no credentials are configured -- which is exactly what a health
+  # check should test: the process is up, not that Anthropic is reachable.
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"   # 256mb is enough for the process, but langgraph + the
+                     # anthropic SDK make import-time memory spiky; 512 avoids
+                     # an OOM on cold start for ~$1/mo more.
+
+# ---------------------------------------------------------------------------
+# First deploy
+#
+#   brew install flyctl && fly auth login
+#   fly launch --no-deploy --copy-config --name bball-oracle-agent
+#   fly secrets set \
+#       ANTHROPIC_API_KEY=... \
+#       AGENT_SERVICE_TOKEN=... \
+#       AGENT_API_BASE_URL=https://bball-oracle.vercel.app
+#   fly deploy
+#
+# AGENT_API_BASE_URL must point at the *deployed* Next app: that is where
+# /api/internal/query lives. Pointing it at localhost is the most likely
+# first-deploy mistake and shows up as every query timing out.
+#
+# Then set the other half of the loop on Vercel:
+#   AGENT_SERVICE_URL   = https://bball-oracle-agent.fly.dev
+#   AGENT_SERVICE_TOKEN = <the same token>
+# ---------------------------------------------------------------------------

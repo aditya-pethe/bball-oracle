@@ -1,0 +1,7 @@
+# Eval harness. Kept separate from pipeline/requirements.txt: the harness runs
+# against the live app and the Anthropic API, not the ETL's data stack.
+PyYAML>=6.0
+pytest>=8.0
+psycopg2-binary>=2.9
+httpx>=0.27
+anthropic>=0.40

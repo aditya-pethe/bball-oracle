@@ -15,9 +15,12 @@ import SchemaBrowser from "./SchemaBrowser";
 import ExampleList from "./ExampleList";
 import HistoryPanel from "./HistoryPanel";
 import ResultsArea from "./ResultsArea";
+import AgentTab from "./AgentTab";
 
 const SQL_STORAGE_KEY = "bball-oracle.sandbox.sql";
 const DEFAULT_SQL = "SELECT * FROM nba.pbp_event LIMIT 20";
+
+type SandboxTab = "editor" | "agent";
 
 function failureFrom(status: number, body: Record<string, unknown>): QueryResult {
   const error = typeof body.error === "string" ? body.error : `request failed (${status})`;
@@ -39,6 +42,7 @@ function failureFrom(status: number, body: Record<string, unknown>): QueryResult
 }
 
 export default function Sandbox() {
+  const [tab, setTab] = useState<SandboxTab>("editor");
   // Lazy initializer instead of a load-on-mount effect: window is absent during SSR,
   // where the sandbox renders no editor content anyway (CSR by design).
   const [sql, setSql] = useState(() =>
@@ -115,49 +119,78 @@ export default function Sandbox() {
     refreshHistory();
   }, [running, retryRemaining, sql, refreshHistory]);
 
+  const openInEditor = useCallback((sqlToLoad: string) => {
+    setSql(sqlToLoad);
+    setTab("editor");
+  }, []);
+
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_19rem] gap-3 p-3">
-      <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto">
-        <SchemaBrowser
-          schema={schema}
-          onInsert={(name) => editorRef.current?.insertAtCursor(name)}
-        />
-        <ExampleList onSelect={setSql} />
-      </aside>
-
-      <section className="flex min-h-0 flex-col gap-2">
-        <div className="h-64 shrink-0">
-          <SqlEditor
-            ref={editorRef}
-            value={sql}
-            onChange={setSql}
-            onRun={run}
-            disabled={runDisabled}
-            schema={schema}
-          />
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-1 border-b border-edge px-3 pt-2">
+        {(["editor", "agent"] as const).map((t) => (
           <button
+            key={t}
             type="button"
-            onClick={run}
-            disabled={runDisabled}
-            className="rounded-panel bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => setTab(t)}
+            aria-current={tab === t}
+            className={`rounded-panel px-3 py-1.5 text-sm font-semibold capitalize ${
+              tab === t
+                ? "border border-b-0 border-edge bg-surface text-ink"
+                : "text-ink-faint hover:text-ink"
+            }`}
           >
-            {running ? "Running…" : "Run"}
+            {t}
           </button>
-          <span className="text-xs text-ink-faint">⌘⏎ / Ctrl+Enter</span>
-          {retryRemaining > 0 && (
-            <span className="text-xs text-warning">
-              Rate limited — retry in {retryRemaining}s
-            </span>
-          )}
-        </div>
-        <ResultsArea state={uiState} />
-      </section>
+        ))}
+      </div>
 
-      <aside className="min-h-0 overflow-y-auto">
-        <HistoryPanel entries={history} onSelect={setSql} />
-      </aside>
+      {tab === "editor" ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_19rem] gap-3 p-3">
+          <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+            <SchemaBrowser
+              schema={schema}
+              onInsert={(name) => editorRef.current?.insertAtCursor(name)}
+            />
+            <ExampleList onSelect={setSql} />
+          </aside>
+
+          <section className="flex min-h-0 flex-col gap-2">
+            <div className="h-64 shrink-0">
+              <SqlEditor
+                ref={editorRef}
+                value={sql}
+                onChange={setSql}
+                onRun={run}
+                disabled={runDisabled}
+                schema={schema}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={run}
+                disabled={runDisabled}
+                className="rounded-panel bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {running ? "Running…" : "Run"}
+              </button>
+              <span className="text-xs text-ink-faint">⌘⏎ / Ctrl+Enter</span>
+              {retryRemaining > 0 && (
+                <span className="text-xs text-warning">
+                  Rate limited — retry in {retryRemaining}s
+                </span>
+              )}
+            </div>
+            <ResultsArea state={uiState} />
+          </section>
+
+          <aside className="min-h-0 overflow-y-auto">
+            <HistoryPanel entries={history} onSelect={setSql} />
+          </aside>
+        </div>
+      ) : (
+        <AgentTab schema={schema} onOpenInEditor={openInEditor} />
+      )}
     </div>
   );
 }

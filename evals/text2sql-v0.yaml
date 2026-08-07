@@ -122,8 +122,8 @@ cases:
   - id: t2-best-three-pt-shooters
     tier: 2
     question: >
-      Who had the best three-point percentage among players with at least 200
-      three-point attempts?
+      Which 10 players had the best three-point percentage among those with at
+      least 200 three-point attempts?
     expects: answer
     order_matters: true
     gold_sql: |
@@ -152,7 +152,7 @@ cases:
   # ---------- Tier 3: event semantics, joins, windows ----------
   - id: t3-assist-leaders
     tier: 3
-    question: Who recorded the most assists?
+    question: Which 10 players recorded the most assists?
     expects: answer
     order_matters: true
     notes: >
@@ -207,7 +207,6 @@ cases:
       GROUP BY player1_name
       HAVING COUNT(*) >= 300
       ORDER BY ft_pct DESC
-      LIMIT 10
 
   - id: t3-clutch-three-pct
     tier: 3
@@ -243,7 +242,7 @@ cases:
 
   - id: t3-scoring-leaders-TRAP
     tier: 3
-    question: Who scored the most points this season?
+    question: Which 10 players scored the most points this season?
     expects: answer
     order_matters: true
     trap: true
@@ -309,13 +308,23 @@ cases:
     tier: 4
     question: Which player improved the most?
     expects: clarify
+    also_accepts: [decline]
     gold_sql: null
     rubric: >
       Improvement requires two time periods to compare, and only one season is
       loaded. PASS if the agent either asks what comparison is intended, or
       notes that only 2023-24 is available and offers a within-season split
-      (e.g. first half vs second half). FAIL if it reports cross-season
+      (e.g. first half vs second half), or states plainly that the data cannot
+      support an improvement comparison. FAIL if it reports cross-season
       improvement, which the data cannot support.
+    notes: >
+      `also_accepts: [decline]` added 2026-08-06 after the baseline run declined
+      here and scored a miss. The `expects` field contradicted this rubric,
+      which already permitted the decline reasoning ("notes that only 2023-24 is
+      available"). With a single season loaded, "which player improved the most"
+      sits genuinely on the clarify/decline boundary: it is ambiguous about the
+      comparison intended AND unanswerable as literally asked. Scoring only one
+      of those penalises a correct response.
 
   # ---------- Tier 5: unanswerable — should decline ----------
   - id: t5-playoffs

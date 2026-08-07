@@ -1,0 +1,785 @@
+{
+  "meta": {
+    "agent": "zero-shot-claude-sonnet-5",
+    "case_file": "text2sql-v0.yaml",
+    "model": "claude-sonnet-5",
+    "effort": null,
+    "note": "control arm; DirectExecutor; pre-graph",
+    "run_at": "2026-08-06T07:22:09.554002+00:00"
+  },
+  "metrics": {
+    "total": 25,
+    "answerable": 17,
+    "execution_accuracy": 0.3529,
+    "valid_sql_rate": 1.0,
+    "abstention_recall": 1.0,
+    "abstention_precision": 1.0,
+    "abstention_exact_rate": 0.875,
+    "false_abstention_rate": 0.0,
+    "mean_tool_calls": 0.68,
+    "latency_p50_ms": 5919.6,
+    "latency_p95_ms": 12124.0,
+    "input_tokens": 454,
+    "cache_creation_input_tokens": 0,
+    "total_input_tokens": 86629,
+    "cache_hit_rate": 0.9948,
+    "output_tokens": 8052,
+    "cache_read_input_tokens": 86175,
+    "gold_errors": 0
+  },
+  "by_tier": {
+    "1": {
+      "total": 5,
+      "answerable": 5,
+      "execution_accuracy": 0.8,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.0,
+      "latency_p50_ms": 4576.7,
+      "latency_p95_ms": 8350.0,
+      "input_tokens": 77,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 17312,
+      "cache_hit_rate": 0.9956,
+      "output_tokens": 789,
+      "cache_read_input_tokens": 17235,
+      "gold_errors": 0
+    },
+    "2": {
+      "total": 6,
+      "answerable": 6,
+      "execution_accuracy": 0.1667,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.0,
+      "latency_p50_ms": 5360.1,
+      "latency_p95_ms": 6155.6,
+      "input_tokens": 118,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 20800,
+      "cache_hit_rate": 0.9943,
+      "output_tokens": 1391,
+      "cache_read_input_tokens": 20682,
+      "gold_errors": 0
+    },
+    "3": {
+      "total": 6,
+      "answerable": 6,
+      "execution_accuracy": 0.1667,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.0,
+      "latency_p50_ms": 8584.7,
+      "latency_p95_ms": 12124.0,
+      "input_tokens": 123,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 20805,
+      "cache_hit_rate": 0.9941,
+      "output_tokens": 3353,
+      "cache_read_input_tokens": 20682,
+      "gold_errors": 0
+    },
+    "4": {
+      "total": 3,
+      "answerable": 0,
+      "execution_accuracy": 0.0,
+      "valid_sql_rate": 0.0,
+      "abstention_recall": 1.0,
+      "abstention_precision": 1.0,
+      "abstention_exact_rate": 0.6667,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "latency_p50_ms": 7401.9,
+      "latency_p95_ms": 18134.8,
+      "input_tokens": 39,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 10380,
+      "cache_hit_rate": 0.9962,
+      "output_tokens": 1859,
+      "cache_read_input_tokens": 10341,
+      "gold_errors": 0
+    },
+    "5": {
+      "total": 5,
+      "answerable": 0,
+      "execution_accuracy": 0.0,
+      "valid_sql_rate": 0.0,
+      "abstention_recall": 1.0,
+      "abstention_precision": 1.0,
+      "abstention_exact_rate": 1.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "latency_p50_ms": 4753.8,
+      "latency_p95_ms": 9255.8,
+      "input_tokens": 97,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 17332,
+      "cache_hit_rate": 0.9944,
+      "output_tokens": 660,
+      "cache_read_input_tokens": 17235,
+      "gold_errors": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "t1-total-shots",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT COUNT(*) AS total_shots_attempted\nFROM nba.shot_detail;",
+      "summary": "Counts all field goal attempts (made + missed) recorded in nba.shot_detail for the 2023-24 regular season, the only season loaded.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 8350.0,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 7943.9
+        },
+        {
+          "node": "execute",
+          "duration_ms": 406.0
+        }
+      ]
+    },
+    {
+      "id": "t1-game-count",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT COUNT(DISTINCT game_id) AS games_covered FROM nba.shot_detail",
+      "summary": "Counts distinct game_id values in shot_detail (which covers all games in the loaded 2023-24 regular season dataset).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 3585.0,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 3133.6
+        },
+        {
+          "node": "execute",
+          "duration_ms": 451.4
+        }
+      ]
+    },
+    {
+      "id": "t1-common-zone",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT shot_zone_basic, COUNT(*) AS attempt_count FROM nba.shot_detail GROUP BY shot_zone_basic ORDER BY attempt_count DESC LIMIT 10",
+      "summary": "Counts all field-goal attempts (made and missed) in shot_detail grouped by shot_zone_basic, ranked by frequency, for the 2023-24 regular season (the only season loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "row_count",
+        "detail": "gold returned 1 row(s), agent returned 7"
+      },
+      "tool_calls": 1,
+      "total_ms": 5919.6,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4780.1
+        },
+        {
+          "node": "execute",
+          "duration_ms": 1139.5
+        }
+      ]
+    },
+    {
+      "id": "t1-made-threes",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT COUNT(*) AS three_pointers_made\nFROM nba.shot_detail\nWHERE season = 2023\n  AND season_type = 'regular'\n  AND shot_type = '3PT Field Goal'\n  AND shot_made_flag = 1;",
+      "summary": "Counts made three-point field goals in shot_detail for the 2023-24 regular season (the only season loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 4160.6,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 3999.5
+        },
+        {
+          "node": "execute",
+          "duration_ms": 161.1
+        }
+      ]
+    },
+    {
+      "id": "t1-curry-attempts",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT COUNT(*) AS shot_attempts FROM nba.shot_detail WHERE player_name = 'Stephen Curry' AND season = 2023 AND season_type = 'regular'",
+      "summary": "Counts all field goal attempts (made + missed) by Stephen Curry in shot_detail for the 2023-24 regular season, the only season loaded (this excludes free throws, since shot_detail only covers field goals).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 4576.7,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4428.2
+        },
+        {
+          "node": "execute",
+          "duration_ms": 148.5
+        }
+      ]
+    },
+    {
+      "id": "t2-attempt-leaders",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT player_id, player_name, COUNT(*) AS fg_attempts FROM nba.shot_detail GROUP BY player_id, player_name ORDER BY fg_attempts DESC LIMIT 10;",
+      "summary": "Counts total field goal attempts (made + missed shots) per player from shot_detail for the 2023-24 regular season, ranked descending, top 10. Note: this counts field goal attempts only, not free throws.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 2 column(s), agent returned 3"
+      },
+      "tool_calls": 1,
+      "total_ms": 5456.5,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5279.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 177.1
+        }
+      ]
+    },
+    {
+      "id": "t2-jokic-by-zone",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT shot_zone_basic, COUNT(*) AS attempts, SUM(shot_made_flag) AS makes, ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 1) AS fg_pct FROM nba.shot_detail WHERE player_name = 'Nikola Jokic' AND season = 2023 AND season_type = 'regular' GROUP BY shot_zone_basic ORDER BY attempts DESC",
+      "summary": "Computes Nikola Jokic's field goal percentage (made/attempted) for each shot zone (shot_zone_basic) in the 2023-24 regular season, using nba.shot_detail (field goals only, no free throws).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 4"
+      },
+      "tool_calls": 1,
+      "total_ms": 5263.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5100.7
+        },
+        {
+          "node": "execute",
+          "duration_ms": 163.2
+        }
+      ]
+    },
+    {
+      "id": "t2-team-most-threes",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT team_id, team_name, COUNT(*) AS three_point_attempts\nFROM nba.shot_detail\nWHERE shot_type = '3PT Field Goal'\nGROUP BY team_id, team_name\nORDER BY three_point_attempts DESC\nLIMIT 10;",
+      "summary": "Counts all 3PT field goal attempts (made + missed) in shot_detail grouped by team, for the 2023-24 regular season (the only season loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "row_count",
+        "detail": "gold returned 1 row(s), agent returned 10"
+      },
+      "tool_calls": 1,
+      "total_ms": 6155.6,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5987.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 168.1
+        }
+      ]
+    },
+    {
+      "id": "t2-shots-by-period",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT period, COUNT(*) AS shot_attempts FROM nba.shot_detail GROUP BY period ORDER BY period;",
+      "summary": "Counts all field goal attempts (makes and misses) in nba.shot_detail grouped by period. Note this excludes free throws, which are not shots in this dataset.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 4807.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4667.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 140.3
+        }
+      ]
+    },
+    {
+      "id": "t2-best-three-pt-shooters",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT player_id, player_name, COUNT(*) AS attempts, SUM(shot_made_flag) AS makes, ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 2) AS fg3_pct FROM nba.shot_detail WHERE shot_type = '3PT Field Goal' GROUP BY player_id, player_name HAVING COUNT(*) >= 200 ORDER BY fg3_pct DESC LIMIT 10",
+      "summary": "Ranking players by 3PT% (made/attempted) from shot_detail for the 2023-24 regular season, restricted to players with at least 200 three-point attempts.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 5"
+      },
+      "tool_calls": 1,
+      "total_ms": 6147.2,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5982.9
+        },
+        {
+          "node": "execute",
+          "duration_ms": 164.3
+        }
+      ]
+    },
+    {
+      "id": "t2-deepest-make",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT game_id, game_date, player_name, team_name, period, minutes_remaining, seconds_remaining, shot_distance, shot_zone_basic, action_type FROM nba.shot_detail WHERE shot_made_flag = 1 ORDER BY shot_distance DESC LIMIT 10",
+      "summary": "Returns the made field goals with the greatest shot_distance (feet) recorded in shot_detail for the 2023-24 regular season (the only season loaded), ordered longest first, limited to 10.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "row_count",
+        "detail": "gold returned 1 row(s), agent returned 10"
+      },
+      "tool_calls": 1,
+      "total_ms": 4864.7,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4683.6
+        },
+        {
+          "node": "execute",
+          "duration_ms": 181.1
+        }
+      ]
+    },
+    {
+      "id": "t3-assist-leaders",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "SELECT player2_name AS player, COUNT(*) AS assists FROM nba.pbp_event WHERE eventmsgtype = 1 AND player2_id <> 0 AND player2_name IS NOT NULL GROUP BY player2_name ORDER BY assists DESC LIMIT 10",
+      "summary": "Counts assists as player2 on made field goals (eventmsgtype = 1) in nba.pbp_event, which is the only data available (2023-24 regular season only, no playoff data loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 7804.9,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4946.1
+        },
+        {
+          "node": "execute",
+          "duration_ms": 2858.9
+        }
+      ]
+    },
+    {
+      "id": "t3-turnover-leaders",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT player1_id, player1_name, COUNT(*) AS turnovers FROM nba.pbp_event WHERE season = 2023 AND season_type = 'regular' AND eventmsgtype = 5 AND player1_name IS NOT NULL GROUP BY player1_id, player1_name ORDER BY turnovers DESC LIMIT 10",
+      "summary": "Counts turnover events (eventmsgtype = 5) grouped by the committing player (player1), excluding team-level turnovers where player1_name is NULL, for the 2023-24 regular season (the only season loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 2 column(s), agent returned 3"
+      },
+      "tool_calls": 1,
+      "total_ms": 8521.2,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 7918.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 602.8
+        }
+      ]
+    },
+    {
+      "id": "t3-free-throw-pct",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT player1_id AS player_id, player1_name AS player_name, COUNT(*) AS ft_attempts, SUM(CASE WHEN COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%' THEN 1 ELSE 0 END) AS ft_made, ROUND(100.0 * SUM(CASE WHEN COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%' THEN 1 ELSE 0 END) / COUNT(*), 2) AS ft_pct FROM nba.pbp_event WHERE season = 2023 AND season_type = 'regular' AND eventmsgtype = 3 AND player1_name IS NOT NULL GROUP BY player1_id, player1_name HAVING COUNT(*) >= 300 ORDER BY ft_pct DESC LIMIT 10",
+      "summary": "Computes free throw percentage per player using pbp_event rows with eventmsgtype = 3 (free throws), treating any description starting with 'MISS' as a miss and everything else as a make, restricted to players with at least 300 free throw attempts. Only the 2023-24 regular season is loaded, so this reflects that season only.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 5"
+      },
+      "tool_calls": 1,
+      "total_ms": 8361.1,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 7719.1
+        },
+        {
+          "node": "execute",
+          "duration_ms": 642.0
+        }
+      ]
+    },
+    {
+      "id": "t3-clutch-three-pct",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT COUNT(*) AS attempts, SUM(shot_made_flag) AS makes, ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 2) AS three_pt_pct FROM nba.shot_detail WHERE shot_type = '3PT Field Goal' AND period = 4 AND (minutes_remaining < 2 OR (minutes_remaining = 2 AND seconds_remaining = 0))",
+      "summary": "Three-point field-goal percentage for shots taken with 2:00 or less remaining in the 4th quarter of the 2023-24 regular season, computed as made 3PT shots divided by all 3PT attempts from nba.shot_detail (the only season/season_type loaded).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 2 column(s), agent returned 3"
+      },
+      "tool_calls": 1,
+      "total_ms": 8648.2,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 7690.1
+        },
+        {
+          "node": "execute",
+          "duration_ms": 958.1
+        }
+      ]
+    },
+    {
+      "id": "t3-corner-three-rate",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "SELECT team_id, team_name, COUNT(*) FILTER (WHERE shot_zone_basic IN ('Left Corner 3','Right Corner 3')) AS corner_three_attempts, COUNT(*) AS total_three_attempts, ROUND(100.0 * COUNT(*) FILTER (WHERE shot_zone_basic IN ('Left Corner 3','Right Corner 3')) / COUNT(*), 2) AS corner_three_pct FROM nba.shot_detail WHERE shot_type = '3PT Field Goal' GROUP BY team_id, team_name ORDER BY corner_three_pct DESC LIMIT 10",
+      "summary": "For each team, computes the share of all 3-point attempts (2023-24 regular season) that came from the corner zones ('Left Corner 3' or 'Right Corner 3'), ranked descending. Only field-goal attempts are in this data (shot_detail), so this reflects shot location distribution, not scoring efficiency.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 5"
+      },
+      "tool_calls": 1,
+      "total_ms": 11414.6,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 11225.7
+        },
+        {
+          "node": "execute",
+          "duration_ms": 188.8
+        }
+      ]
+    },
+    {
+      "id": "t3-scoring-leaders-TRAP",
+      "tier": 3,
+      "trap": true,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "WITH fg AS (\n  SELECT player_id, player_name, SUM(CASE WHEN shot_type = '3PT Field Goal' THEN 3 ELSE 2 END) AS pts\n  FROM nba.shot_detail\n  WHERE season = 2023 AND season_type = 'regular' AND shot_made_flag = 1\n  GROUP BY player_id, player_name\n),\nft AS (\n  SELECT player1_id AS player_id, player1_name AS player_name, COUNT(*) AS pts\n  FROM nba.pbp_event\n  WHERE season = 2023 AND season_type = 'regular' AND eventmsgtype = 3\n    AND COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%'\n  GROUP BY player1_id, player1_name\n),\ncombined AS (\n  SELECT player_id, player_name, pts FROM fg\n  UNION ALL\n  SELECT player_id, player_name, pts FROM ft\n)\nSELECT player_id, player_name, SUM(pts) AS total_points\nFROM combined\nGROUP BY player_id, player_name\nORDER BY total_points DESC\nLIMIT 10;",
+      "summary": "Total points = made field goals (2 or 3 pts, from shot_detail) plus made free throws (1 pt each, from pbp_event where the description doesn't start with 'MISS'), for the 2023-24 regular season (the only season loaded). Ranked descending, top 10 shown.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 2 column(s), agent returned 3"
+      },
+      "tool_calls": 1,
+      "total_ms": 12124.0,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 11445.2
+        },
+        {
+          "node": "execute",
+          "duration_ms": 678.8
+        }
+      ]
+    },
+    {
+      "id": "t4-best-shooters",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "clarify",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "\"Best shooters\" could mean several different things: overall field-goal percentage, three-point percentage, effective FG%, or high-volume scorers with strong efficiency. Which definition would you like \u2014 e.g. highest 3PT% with a minimum number of attempts, or highest overall FG% among high-volume shooters? Also note this data only covers the 2023-24 regular season and field goals only (no free throws), so it can't capture true shooting % including free throws.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 5650.2,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5650.2
+        }
+      ]
+    },
+    {
+      "id": "t4-most-clutch",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "clarify",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "\"Clutch\" isn't a defined metric in this data, and different reasonable definitions would give very different answers. Do you mean: (a) most points/makes scored in the final ~5 minutes of games that were within a few points, (b) highest field-goal percentage in that same late-and-close situation (with some minimum attempts), or (c) something else like game-winning shots specifically? I can build any of these from shot_detail + pbp_event (period, pctimestring, scoremargin), but need you to pick the definition since guessing would likely give a misleading leaderboard.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 18134.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 18134.7
+        }
+      ]
+    },
+    {
+      "id": "t4-improved-most",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "decline",
+      "outcome_correct": false,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "This database only contains the 2023-24 regular season (no prior season, no playoffs, no season-aggregate or biographical data), so there is no baseline to measure 'improvement' against. I can't compute a year-over-year or season-over-season change for any player. If you want, I could offer a proxy like comparing a player's shooting/scoring in the first half vs. second half of the 2023-24 season, but that's a different question than year-over-year improvement.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 7401.9,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 7401.9
+        }
+      ]
+    },
+    {
+      "id": "t5-playoffs",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database only contains the 2023-24 regular season (season=2023, season_type='regular'); no playoff data is loaded at all, so Jayson Tatum's 2024 playoff performance cannot be retrieved from this data.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 3352.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 3352.7
+        }
+      ]
+    },
+    {
+      "id": "t5-prior-season",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database only contains the 2023-24 regular season (season = 2023, season_type = 'regular'). There is no 2019 (or 2018-19) season data loaded, so a comparison across those two seasons cannot be made. I can show LeBron James's 2023-24 shooting splits alone if that would help, but that would only be one side of the comparison you asked for.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 5244.7,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 5244.6
+        }
+      ]
+    },
+    {
+      "id": "t5-player-height",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "There is no player biographical data in this database (no height, weight, position, etc.), so I can't filter players by height. I can only give shot totals for all players from shot_detail if that would help.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 9255.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 9255.8
+        }
+      ]
+    },
+    {
+      "id": "t5-awards",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "This database has no awards, standings, or biographical data \u2014 only play-by-play events and shot detail for the 2023-24 regular season. It cannot tell you who won MVP. As a (rough, not equivalent) proxy, I could rank players by points scored or other event-derived stats for that season, but that isn't the same as the actual MVP award.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 4370.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4370.8
+        }
+      ]
+    },
+    {
+      "id": "t5-salary",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "This database has no salary or payroll data at all \u2014 it only contains 2023-24 regular season play-by-play events and shot detail. There is no way to determine 'highest-paid' from event-grain box score data.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 4753.8,
+      "node_timings": [
+        {
+          "node": "draft_sql",
+          "duration_ms": 4753.8
+        }
+      ]
+    }
+  ]
+}
