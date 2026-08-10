@@ -376,3 +376,54 @@ class TestCallerErrorsAreNotRetried:
         assert "unknown userId 99" in final["error"]
         assert model.calls.count("draft_sql") == 1  # no wasted redraft
         assert len(executor.calls) == 1
+
+
+class TestConversationMessageLinkage:
+    """The turn id must reach /api/internal/query.
+
+    Without it `query_log.conversation_message_id` stays NULL and the audit
+    trail records the SQL an agent wrote but not the question that produced it
+    -- which is most of the signal when reviewing agent output, and the reason
+    the column exists.
+    """
+
+    def test_execute_node_forwards_the_message_id(self):
+        from agent.execute import ExecOutcome, ExecResult
+        from agent.nodes import execute as execute_node
+        from agent.tests.conftest import FakeExecutor
+
+        executor = FakeExecutor(
+            outcomes=[ExecOutcome(status="ok", result=ExecResult(("n",), ((1,),)))]
+        )
+        node = execute_node.build(executor)
+        node({"sql": "SELECT 1", "user_id": 2, "conversation_message_id": 4321})
+
+        assert executor.conversation_message_ids == [4321]
+
+    def test_absent_message_id_is_omitted_not_null(self):
+        """Eval runs have no conversation; they must not write a linkage row."""
+        import httpx
+
+        from agent.execute import InternalQueryExecutor
+
+        seen: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            import json as _json
+
+            seen.update(_json.loads(request.content))
+            return httpx.Response(
+                200, json={"columns": ["n"], "rows": [[1]], "rowCount": 1,
+                           "truncated": False, "durationMs": 5},
+            )
+
+        executor = InternalQueryExecutor(
+            base_url="https://example.invalid", token="t",
+            transport=httpx.MockTransport(handler),
+        )
+        executor.execute("SELECT 1", 2)
+        assert "conversationMessageId" not in seen
+
+        seen.clear()
+        executor.execute("SELECT 1", 2, 99)
+        assert seen["conversationMessageId"] == 99

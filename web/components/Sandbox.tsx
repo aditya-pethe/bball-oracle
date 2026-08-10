@@ -20,7 +20,10 @@ import AgentTab from "./AgentTab";
 const SQL_STORAGE_KEY = "bball-oracle.sandbox.sql";
 const DEFAULT_SQL = "SELECT * FROM nba.pbp_event LIMIT 20";
 
-type SandboxTab = "editor" | "agent";
+// Agent first, and the default (owner feedback, 2026-08-07). The order of this tuple is the
+// order the tabs render in, so the two facts stay one fact.
+const TABS = ["agent", "editor"] as const;
+type SandboxTab = (typeof TABS)[number];
 
 function failureFrom(status: number, body: Record<string, unknown>): QueryResult {
   const error = typeof body.error === "string" ? body.error : `request failed (${status})`;
@@ -42,7 +45,7 @@ function failureFrom(status: number, body: Record<string, unknown>): QueryResult
 }
 
 export default function Sandbox() {
-  const [tab, setTab] = useState<SandboxTab>("editor");
+  const [tab, setTab] = useState<SandboxTab>(TABS[0]);
   // Lazy initializer instead of a load-on-mount effect: window is absent during SSR,
   // where the sandbox renders no editor content anyway (CSR by design).
   const [sql, setSql] = useState(() =>
@@ -125,9 +128,12 @@ export default function Sandbox() {
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // The sandbox is a viewport-height shell, not a scrolling page: `overflow-hidden` here is
+    // what guarantees the agent composer and the editor's Run button stay on screen. Anything
+    // long inside it (message thread, results table, schema list) scrolls in its own pane.
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-1 border-b border-edge px-3 pt-2">
-        {(["editor", "agent"] as const).map((t) => (
+        {TABS.map((t) => (
           <button
             key={t}
             type="button"
@@ -145,7 +151,11 @@ export default function Sandbox() {
       </div>
 
       {tab === "editor" ? (
-        <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_19rem] gap-3 p-3">
+        // `grid-rows-[minmax(0,1fr)]` is load-bearing: an implicit grid row is `auto`-sized and
+        // grows to its content, so without it the results table pushed the page taller than the
+        // viewport and the Run button/composer scrolled off. Pinning the single row to the
+        // container's height is what makes the panes' own `overflow-y-auto` take effect.
+        <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)_19rem] grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden p-3">
           <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto">
             <SchemaBrowser
               schema={schema}
@@ -165,7 +175,7 @@ export default function Sandbox() {
                 schema={schema}
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3">
               <button
                 type="button"
                 onClick={run}
@@ -181,7 +191,9 @@ export default function Sandbox() {
                 </span>
               )}
             </div>
-            <ResultsArea state={uiState} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <ResultsArea state={uiState} />
+            </div>
           </section>
 
           <aside className="min-h-0 overflow-y-auto">

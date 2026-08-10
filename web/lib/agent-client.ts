@@ -38,7 +38,18 @@ export type AgentDoneEvent = {
   envelope: AgentEnvelope;
 };
 
-export type AgentStreamEvent = AgentNodeEvent | AgentDoneEvent;
+/**
+ * Yielded first, before any graph progress: which persisted rows this turn is being written
+ * into. `/api/agent` creates the conversation when the client didn't name one, so the client
+ * learns its id from the response rather than inventing it.
+ */
+export type AgentMetaEvent = {
+  type: "meta";
+  conversationId: number | null;
+  conversationMessageId: number | null;
+};
+
+export type AgentStreamEvent = AgentMetaEvent | AgentNodeEvent | AgentDoneEvent;
 
 /** Thrown for a non-streaming failure: the proxy rejected the request, the service
  * is unreachable, or the connection dropped mid-stream. `status` is the HTTP status
@@ -101,11 +112,18 @@ function parseSseBlock(raw: string): { event: string; data: string } | null {
 
 export type AgentStreamParams = {
   question: string;
-  /** Opaque client-generated thread id, or null for a fresh one. See route.ts —
-   * conversation persistence doesn't exist yet, so this is a passthrough only. */
-  conversationId?: string | null;
+  /** An `app.conversation` id, or null to have the route create a thread and report its id
+   * back on the first `meta` event. */
+  conversationId?: number | null;
   signal?: AbortSignal;
 };
+
+function headerId(res: Response, name: string): number | null {
+  const raw = res.headers.get(name);
+  if (raw === null || !/^[1-9]\d*$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
 
 /**
  * POSTs to `/api/agent` and yields each SSE event as it arrives: per-node progress,
@@ -139,6 +157,12 @@ export async function* streamAgentAnswer(
     const message = typeof body.error === "string" ? body.error : `agent request failed (${res.status})`;
     throw new AgentClientError(message, res.status);
   }
+
+  yield {
+    type: "meta",
+    conversationId: headerId(res, "x-conversation-id"),
+    conversationMessageId: headerId(res, "x-conversation-message-id"),
+  };
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

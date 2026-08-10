@@ -81,3 +81,15 @@ export type AgentMessage =
 
 export type ConversationListResponse = { conversations: Conversation[] };
 export type ConversationResponse = { conversation: Conversation; messages: AgentMessage[] };
+
+/**
+ * `GET /api/agent` — whether asking anything is possible right now, so the tab can degrade
+ * before the user types rather than after. `enabled` is the AGENT_ENABLED kill switch;
+ * `remaining` is what is left of the per-user daily message budget.
+ */
+export type AgentStatusResponse = {
+  enabled: boolean;
+  used: number;
+  limit: number;
+  remaining: number;
+};

@@ -31,7 +31,10 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="flex min-h-screen flex-col">
+      {/* `dvh`, not `vh`: the sandbox is a viewport-height shell and `100vh` on mobile is the
+          height *without* the browser chrome, which is exactly how a pinned composer ends up
+          just below the fold. */}
+      <body className="flex min-h-dvh flex-col">
         <header className="flex items-center justify-between border-b border-edge px-4 py-2">
           <Link
             href="/"

@@ -32,7 +32,9 @@ from ..state import AgentState
 def build(executor: InternalQueryExecutor) -> Callable[[AgentState], dict]:
     def execute(state: AgentState) -> dict:
         sql = state.get("sql") or ""
-        outcome = executor.execute(sql, state["user_id"])
+        outcome = executor.execute(
+            sql, state["user_id"], state.get("conversation_message_id")
+        )
 
         if outcome.status == "config_error":
             # Not a rung at all. The request was wrong, not the SQL, so this

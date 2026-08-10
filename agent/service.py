@@ -35,6 +35,11 @@ class AgentRequest(BaseModel):
     question: str
     user_id: int
     conversation_id: str | None = None
+    # The app.conversation_message row this turn is being written to. Threaded
+    # down to /api/internal/query so query_log rows link back to the question
+    # that caused them -- without it the audit trail has SQL but no question,
+    # which is most of the signal when reviewing what the agent wrote.
+    conversation_message_id: int | None = None
 
 
 @app.get("/health")
@@ -148,6 +153,7 @@ def _envelope(state: dict) -> dict:
         "tool_calls": 1 if state.get("sql") else 0,
         "input_tokens": state.get("input_tokens", 0),
         "output_tokens": state.get("output_tokens", 0),
+        "cache_creation_input_tokens": state.get("cache_creation_input_tokens", 0),
         "cache_read_input_tokens": state.get("cache_read_input_tokens", 0),
     }
 
@@ -156,7 +162,14 @@ async def _stream_agent(
     req: AgentRequest, model_client: ModelClient, executor: InternalQueryExecutor
 ) -> AsyncIterator[str]:
     graph = build_graph(model_client, executor)
-    state = dict(new_state(req.question, req.user_id, req.conversation_id))
+    state = dict(
+        new_state(
+            req.question,
+            req.user_id,
+            req.conversation_id,
+            conversation_message_id=req.conversation_message_id,
+        )
+    )
 
     sync_stream = graph.stream(state, stream_mode="updates")
     async for chunk in _sync_to_async_iter(sync_stream):
@@ -167,6 +180,7 @@ async def _stream_agent(
                 elif key in (
                     "input_tokens",
                     "output_tokens",
+                    "cache_creation_input_tokens",
                     "cache_read_input_tokens",
                     "total_model_calls",
                     "execute_retry_count",

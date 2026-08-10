@@ -83,6 +83,7 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
             "total_model_calls": 1,
             "input_tokens": reply.input_tokens,
             "output_tokens": reply.output_tokens,
+            "cache_creation_input_tokens": reply.cache_creation_input_tokens,
             "cache_read_input_tokens": reply.cache_read_input_tokens,
         }
 

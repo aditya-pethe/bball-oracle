@@ -1,0 +1,1014 @@
+{
+  "meta": {
+    "agent": "graph-claude-sonnet-5",
+    "case_file": "text2sql-v0.yaml",
+    "model": "claude-sonnet-5",
+    "effort": null,
+    "note": "LangGraph agent vs zero-shot baseline; deployed path; eval user 3",
+    "run_at": "2026-08-07T16:52:41.887325+00:00"
+  },
+  "metrics": {
+    "total": 25,
+    "answerable": 17,
+    "execution_accuracy": 0.6471,
+    "valid_sql_rate": 1.0,
+    "abstention_recall": 1.0,
+    "abstention_precision": 1.0,
+    "abstention_exact_rate": 1.0,
+    "false_abstention_rate": 0.0,
+    "mean_tool_calls": 0.72,
+    "latency_p50_ms": 13148.4,
+    "latency_p95_ms": 22399.4,
+    "input_tokens": 15080,
+    "cache_creation_input_tokens": 0,
+    "total_input_tokens": 310806,
+    "cache_hit_rate": 0.9515,
+    "output_tokens": 14726,
+    "cache_read_input_tokens": 295726,
+    "gold_errors": 0
+  },
+  "by_tier": {
+    "1": {
+      "total": 5,
+      "answerable": 5,
+      "execution_accuracy": 1.0,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.0,
+      "latency_p50_ms": 12831.9,
+      "latency_p95_ms": 14469.6,
+      "input_tokens": 2311,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 78821,
+      "cache_hit_rate": 0.9707,
+      "output_tokens": 1642,
+      "cache_read_input_tokens": 76510,
+      "gold_errors": 0
+    },
+    "2": {
+      "total": 6,
+      "answerable": 6,
+      "execution_accuracy": 0.5,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.0,
+      "latency_p50_ms": 14051.6,
+      "latency_p95_ms": 16657.2,
+      "input_tokens": 4453,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 96265,
+      "cache_hit_rate": 0.9537,
+      "output_tokens": 2695,
+      "cache_read_input_tokens": 91812,
+      "gold_errors": 0
+    },
+    "3": {
+      "total": 6,
+      "answerable": 6,
+      "execution_accuracy": 0.5,
+      "valid_sql_rate": 1.0,
+      "abstention_recall": 0.0,
+      "abstention_precision": 0.0,
+      "abstention_exact_rate": 0.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 1.17,
+      "latency_p50_ms": 20303.4,
+      "latency_p95_ms": 64701.8,
+      "input_tokens": 7844,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 103376,
+      "cache_hit_rate": 0.9241,
+      "output_tokens": 9248,
+      "cache_read_input_tokens": 95532,
+      "gold_errors": 0
+    },
+    "4": {
+      "total": 3,
+      "answerable": 0,
+      "execution_accuracy": 0.0,
+      "valid_sql_rate": 0.0,
+      "abstention_recall": 1.0,
+      "abstention_precision": 1.0,
+      "abstention_exact_rate": 1.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "latency_p50_ms": 4641.6,
+      "latency_p95_ms": 5724.6,
+      "input_tokens": 165,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 12117,
+      "cache_hit_rate": 0.9864,
+      "output_tokens": 553,
+      "cache_read_input_tokens": 11952,
+      "gold_errors": 0
+    },
+    "5": {
+      "total": 5,
+      "answerable": 0,
+      "execution_accuracy": 0.0,
+      "valid_sql_rate": 0.0,
+      "abstention_recall": 1.0,
+      "abstention_precision": 1.0,
+      "abstention_exact_rate": 1.0,
+      "false_abstention_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "latency_p50_ms": 3824.0,
+      "latency_p95_ms": 4794.2,
+      "input_tokens": 307,
+      "cache_creation_input_tokens": 0,
+      "total_input_tokens": 20227,
+      "cache_hit_rate": 0.9848,
+      "output_tokens": 588,
+      "cache_read_input_tokens": 19920,
+      "gold_errors": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "t1-total-shots",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counts all field goal attempts (made + missed) in shot_detail.\n-- Note: this excludes free throws, which are not shot attempts in the field-goal sense.\nSELECT COUNT(*) AS total_shot_attempts\nFROM nba.shot_detail;",
+      "summary": "The dataset contains 218,701 field goal attempts (made and missed shots) in nba.shot_detail; this count excludes free throws, which are not recorded as shot attempts in this table.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 12033.1,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3540.6
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 2864.9
+        },
+        {
+          "node": "execute",
+          "duration_ms": 439.9
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2906.2
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2272.3
+        }
+      ]
+    },
+    {
+      "id": "t1-game-count",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counting distinct games present in the play-by-play event table (2023-24 regular season only)\nSELECT COUNT(DISTINCT game_id) AS games_covered\nFROM nba.pbp_event;",
+      "summary": "The dataset covers 1,230 distinct games, which matches the full 2023-24 NBA regular season schedule (no playoff data is included).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 12831.9,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3464.1
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3444.0
+        },
+        {
+          "node": "execute",
+          "duration_ms": 472.7
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3039.8
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2404.9
+        }
+      ]
+    },
+    {
+      "id": "t1-common-zone",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- \"Most common shot zone\" interpreted as the shot_zone_basic with the highest total number of field goal attempts (made + missed), across the only loaded season (2023-24 regular season)\nSELECT shot_zone_basic, COUNT(*) AS attempts\nFROM nba.shot_detail\nGROUP BY shot_zone_basic\nORDER BY attempts DESC\nLIMIT 1;",
+      "summary": "During the 2023-24 regular season, the Restricted Area was the most common shot zone, accounting for 64,669 field goal attempts (makes and misses combined).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 14469.6,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3922.7
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 5158.3
+        },
+        {
+          "node": "execute",
+          "duration_ms": 464.4
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2593.5
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2325.1
+        }
+      ]
+    },
+    {
+      "id": "t1-made-threes",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counting made three-point field goals from shot_detail for the only loaded season (2023-24 regular season)\nSELECT COUNT(*) AS three_pointers_made\nFROM nba.shot_detail\nWHERE season = 2023\n  AND season_type = 'regular'\n  AND shot_type = '3PT Field Goal'\n  AND shot_made_flag = 1",
+      "summary": "There were 31,579 made three-point field goals in the 2023-24 regular season, the only season loaded in this database.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 12229.8,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3279.1
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3310.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 466.4
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2991.3
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2176.9
+        }
+      ]
+    },
+    {
+      "id": "t1-curry-attempts",
+      "tier": 1,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counts field goal attempts only (shot_detail has no free throws); 2023-24 regular season is the only season loaded\nSELECT COUNT(*) AS field_goal_attempts\nFROM nba.shot_detail\nWHERE player_name = 'Stephen Curry'\n  AND season = 2023\n  AND season_type = 'regular'",
+      "summary": "Stephen Curry attempted 1,445 field goals in the 2023-24 regular season (note: this counts field goal attempts only, as the dataset does not include free throw attempts).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 13465.2,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3314.1
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3231.5
+        },
+        {
+          "node": "execute",
+          "duration_ms": 441.1
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3872.2
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2601.4
+        }
+      ]
+    },
+    {
+      "id": "t2-attempt-leaders",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counting all field goal attempts (made + missed) from shot_detail.\n-- Note: this counts field goal attempts only; free throws are not shots and are excluded.\nSELECT player_name, COUNT(*) AS attempts\nFROM nba.shot_detail\nGROUP BY player_name\nORDER BY attempts DESC\nLIMIT 10",
+      "summary": "Luka Doncic led all players in field goal attempts during the 2023-24 regular season with 1,652 shots, narrowly ahead of Jalen Brunson (1,648) and Anthony Edwards (1,558), rounding out the top 10 with Tyrese Maxey at 1,419; note this counts field goal attempts only, excluding free throws.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 13148.4,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4160.9
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3154.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 305.5
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2706.7
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2815.6
+        }
+      ]
+    },
+    {
+      "id": "t2-jokic-by-zone",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Field goal percentage by shot zone for Nikola Jokic, 2023-24 regular season (only season loaded).\n-- FG% is computed purely from field goal attempts (shot_detail), which is the correct source for this stat.\nSELECT\n    shot_zone_basic,\n    COUNT(*) AS attempts,\n    SUM(shot_made_flag) AS makes,\n    ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 1) AS fg_pct\nFROM nba.shot_detail\nWHERE player_name = 'Nikola Jokic'\n  AND season = 2023\n  AND season_type = 'regular'\nGROUP BY shot_zone_basic\nORDER BY fg_pct DESC;",
+      "summary": "For Nikola Jokic in the 2023-24 regular season, his highest shot-zone FG% is Restricted Area at 70.2% (335-for-477), followed by In The Paint (Non-RA) at 61.7% (330-for-535), Mid-Range at 44.0% (74-for-168), and lower rates on threes (37.7% Above the Break, 40.0% Left Corner on only 5 attempts, 0% on Right Corner 3 and Backcourt with very small samples).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 4"
+      },
+      "tool_calls": 1,
+      "total_ms": 14044.5,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 2952.5
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 4835.7
+        },
+        {
+          "node": "execute",
+          "duration_ms": 313.0
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2708.2
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 3230.5
+        }
+      ]
+    },
+    {
+      "id": "t2-team-most-threes",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counting all 3PT field goal attempts (made + missed) per team in the 2023-24 regular season (only season loaded)\nSELECT team_name, COUNT(*) AS three_point_attempts\nFROM nba.shot_detail\nWHERE shot_type = '3PT Field Goal'\nGROUP BY team_name\nORDER BY three_point_attempts DESC\nLIMIT 1;",
+      "summary": "The Boston Celtics attempted the most three-pointers in the 2023-24 regular season (the only season loaded), with 3,482 attempts.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 12616.0,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3718.1
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3502.8
+        },
+        {
+          "node": "execute",
+          "duration_ms": 443.5
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2643.1
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2302.9
+        }
+      ]
+    },
+    {
+      "id": "t2-shots-by-period",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Counts field-goal attempts (makes + misses) from shot_detail by period.\n-- Note: this reflects field goal attempts only; free throws are not shots and are excluded.\nSELECT period, COUNT(*) AS shot_attempts\nFROM nba.shot_detail\nGROUP BY period\nORDER BY period;",
+      "summary": "Field goal attempts by period in the 2023-24 regular season peak in period 1 with 56,484 shots, tapering to 51,983 in period 4, with only 1,042 and 142 attempts in the two overtime periods (5 and 6); note this counts field goal attempts only, not free throws.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 15154.3,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3340.4
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 5671.0
+        },
+        {
+          "node": "execute",
+          "duration_ms": 639.5
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2776.1
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2723.0
+        }
+      ]
+    },
+    {
+      "id": "t2-best-three-pt-shooters",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Three-point percentage leaderboard, minimum 200 three-point attempts (threshold chosen since none was specified)\nSELECT\n    player_name,\n    COUNT(*) AS attempts,\n    SUM(shot_made_flag) AS makes,\n    ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 1) AS three_pt_pct\nFROM nba.shot_detail\nWHERE shot_type = '3PT Field Goal'\nGROUP BY player_name\nHAVING COUNT(*) >= 200\nORDER BY three_pt_pct DESC\nLIMIT 10",
+      "summary": "Among 2023-24 regular season players with at least 200 three-point attempts, Grayson Allen led with a 46.1% three-point percentage (205-for-445), followed by Luke Kennard (45.0%) and Mike Conley (44.2%).",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 4"
+      },
+      "tool_calls": 1,
+      "total_ms": 16657.2,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4163.8
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 5993.0
+        },
+        {
+          "node": "execute",
+          "duration_ms": 328.4
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3362.9
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2804.9
+        }
+      ]
+    },
+    {
+      "id": "t2-deepest-make",
+      "tier": 2,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Longest made field goal in the 2023-24 regular season (only season loaded), by shot_distance in feet\nSELECT player_name, team_name, game_date, shot_distance, action_type\nFROM nba.shot_detail\nWHERE shot_made_flag = 1\nORDER BY shot_distance DESC\nLIMIT 1",
+      "summary": "The longest made shot of the 2023-24 regular season was a 62-foot pullup jump shot by Mikal Bridges (Brooklyn Nets) on 2024-03-23.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 5"
+      },
+      "tool_calls": 1,
+      "total_ms": 14058.6,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4805.2
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 3310.8
+        },
+        {
+          "node": "execute",
+          "duration_ms": 529.2
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3054.3
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2354.0
+        }
+      ]
+    },
+    {
+      "id": "t3-assist-leaders",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Assists are only recorded on made field goals (eventmsgtype = 1), via player2_name.\n-- Free throws and other event types never carry assist information in this schema.\nSELECT player2_name AS player, COUNT(*) AS assists\nFROM nba.pbp_event\nWHERE eventmsgtype = 1\n  AND player2_id IS NOT NULL\n  AND player2_id <> 0\nGROUP BY player2_name\nORDER BY assists DESC\nLIMIT 10;",
+      "summary": "Tyrese Haliburton leads the 2023-24 regular season with 752 assists, followed by Nikola Jokic (708) and Luka Doncic (686), rounding out the top 10 assist leaders derived from made-field-goal events.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 18802.2,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4563.9
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 4806.2
+        },
+        {
+          "node": "execute",
+          "duration_ms": 635.1
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3993.7
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 4794.9
+        }
+      ]
+    },
+    {
+      "id": "t3-turnover-leaders",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Turnovers are eventmsgtype = 5 in nba.pbp_event. player1_id/player1_name identifies the player charged with the turnover;\n-- team turnovers (e.g. shot clock, out of bounds credited to team) have player1_name NULL and are excluded here.\n-- Only the 2023-24 regular season is loaded. Showing the top 10 players by turnover count.\nSELECT\n    player1_name AS player,\n    COUNT(*) AS turnovers\nFROM nba.pbp_event\nWHERE season = 2023\n  AND season_type = 'regular'\n  AND eventmsgtype = 5\n  AND player1_name IS NOT NULL\nGROUP BY player1_name\nORDER BY turnovers DESC\nLIMIT 10;",
+      "summary": "For the 2023-24 regular season, Luka Doncic committed the most turnovers with 282, narrowly ahead of Domantas Sabonis (272) and Victor Wembanyama (260); the top 10 list is shown.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 1,
+      "total_ms": 14232.8,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4015.7
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 4566.3
+        },
+        {
+          "node": "execute",
+          "duration_ms": 408.3
+        },
+        {
+          "node": "critic",
+          "duration_ms": 2865.6
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2371.7
+        }
+      ]
+    },
+    {
+      "id": "t3-free-throw-pct",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Free throws only exist in nba.pbp_event (eventmsgtype = 3); a miss is indicated by the description starting with 'MISS'.\n-- Only the 2023-24 regular season is loaded.\n-- Threshold: at least 300 free throw attempts, as specified in the question.\nSELECT\n    player1_name AS player,\n    COUNT(*) AS ft_attempts,\n    SUM(CASE WHEN COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%' THEN 1 ELSE 0 END) AS ft_made,\n    ROUND(\n        100.0 * SUM(CASE WHEN COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%' THEN 1 ELSE 0 END) / COUNT(*),\n        1\n    ) AS ft_pct\nFROM nba.pbp_event\nWHERE season = 2023\n  AND season_type = 'regular'\n  AND eventmsgtype = 3\nGROUP BY player1_id, player1_name\nHAVING COUNT(*) >= 300\nORDER BY ft_pct DESC;",
+      "summary": "For 2023-24 regular season players with at least 300 free-throw attempts, Stephen Curry leads with a 92.3% free throw percentage (299/324), narrowly ahead of Damian Lillard at 92.0% (473/514); 43 players met the threshold in total.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 4"
+      },
+      "tool_calls": 1,
+      "total_ms": 21804.5,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3732.5
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 7858.4
+        },
+        {
+          "node": "execute",
+          "duration_ms": 604.3
+        },
+        {
+          "node": "critic",
+          "duration_ms": 6230.7
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 3373.4
+        }
+      ]
+    },
+    {
+      "id": "t3-clutch-three-pct",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Three-point shots in the final two minutes of the 4th quarter (clock remaining <= 2:00), regular season 2023-24\nSELECT\n    COUNT(*) AS attempts,\n    SUM(shot_made_flag) AS makes,\n    ROUND(100.0 * SUM(shot_made_flag) / COUNT(*), 1) AS three_pt_pct\nFROM nba.shot_detail\nWHERE shot_type = '3PT Field Goal'\n  AND period = 4\n  AND (minutes_remaining < 2 OR (minutes_remaining = 2 AND seconds_remaining = 0));",
+      "summary": "In the final two minutes of the fourth quarter (2023-24 regular season), players shot 29.7% on three-pointers, making 1,217 of 4,091 attempts.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 2 column(s), agent returned 3"
+      },
+      "tool_calls": 1,
+      "total_ms": 14516.8,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4039.5
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 4520.1
+        },
+        {
+          "node": "execute",
+          "duration_ms": 611.2
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3023.7
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2317.1
+        }
+      ]
+    },
+    {
+      "id": "t3-corner-three-rate",
+      "tier": 3,
+      "trap": false,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": false,
+      "sql": "-- Only the 2023-24 regular season is loaded, so this reflects that season only.\n-- \"Corner\" threes are shot_zone_basic IN ('Left Corner 3','Right Corner 3').\n-- Share = corner three attempts / all three-point attempts (made+missed) for the team.\n-- No size was specified for the ranking, so showing the top 10 teams by corner-three share.\nSELECT\n    team_name,\n    COUNT(*) FILTER (WHERE shot_zone_basic IN ('Left Corner 3','Right Corner 3')) AS corner_three_attempts,\n    COUNT(*) FILTER (WHERE shot_type = '3PT Field Goal') AS total_three_attempts,\n    ROUND(\n        100.0 * COUNT(*) FILTER (WHERE shot_zone_basic IN ('Left Corner 3','Right Corner 3'))\n        / NULLIF(COUNT(*) FILTER (WHERE shot_type = '3PT Field Goal'), 0),\n        1\n    ) AS corner_three_share_pct\nFROM nba.shot_detail\nWHERE season = 2023\n  AND season_type = 'regular'\n  AND shot_type = '3PT Field Goal'\nGROUP BY team_name\nORDER BY corner_three_share_pct DESC\nLIMIT 10;",
+      "summary": "For the 2023-24 regular season, the Miami Heat took the highest share of their three-point attempts from the corners (29.8%, 824 of 2,765 threes), narrowly ahead of the Minnesota Timberwolves (29.3%) and Utah Jazz (28.8%) in this top-10 ranking.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": {
+        "kind": "column_count",
+        "detail": "gold returned 3 column(s), agent returned 4"
+      },
+      "tool_calls": 1,
+      "total_ms": 22399.4,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4613.9
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 11099.7
+        },
+        {
+          "node": "execute",
+          "duration_ms": 489.2
+        },
+        {
+          "node": "critic",
+          "duration_ms": 3358.2
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 2833.1
+        }
+      ]
+    },
+    {
+      "id": "t3-scoring-leaders-TRAP",
+      "tier": 3,
+      "trap": true,
+      "expects": "answer",
+      "outcome": "answer",
+      "outcome_correct": true,
+      "execution_correct": true,
+      "sql": "-- Points = field goals (2 or 3 pts, from shot_detail) + made free throws (1 pt each, from pbp_event).\n-- Only 2023-24 regular season is loaded, so results are scoped to that.\n-- Rewritten to aggregate by player_id first (much cheaper) and resolve names only for the final top 10.\nWITH scoring AS (\n    SELECT player_id, SUM(pts) AS pts\n    FROM (\n        SELECT player_id, SUM(CASE WHEN shot_type = '3PT Field Goal' THEN 3 ELSE 2 END) AS pts\n        FROM nba.shot_detail\n        WHERE season = 2023 AND season_type = 'regular' AND shot_made_flag = 1\n        GROUP BY player_id\n        UNION ALL\n        SELECT player1_id AS player_id, COUNT(*) AS pts\n        FROM nba.pbp_event\n        WHERE season = 2023 AND season_type = 'regular' AND eventmsgtype = 3\n          AND COALESCE(homedescription, visitordescription, neutraldescription) NOT LIKE 'MISS%'\n        GROUP BY player1_id\n    ) t\n    GROUP BY player_id\n    ORDER BY pts DESC\n    LIMIT 10\n)\nSELECT\n    COALESCE(\n        (SELECT sd.player_name FROM nba.shot_detail sd WHERE sd.player_id = s.player_id LIMIT 1),\n        (SELECT pe.player1_name FROM nba.pbp_event pe WHERE pe.player1_id = s.player_id LIMIT 1)\n    ) AS player_name,\n    s.pts AS total_points\nFROM scoring s\nORDER BY s.pts DESC;",
+      "summary": "Combining field goals from shot_detail with made free throws from pbp_event, Luka Doncic led all players in the 2023-24 regular season with 2,370 points, followed by Shai Gilgeous-Alexander (2,254) and Giannis Antetokounmpo (2,222), rounding out a top-10 that ends with Stephen Curry at 1,956.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 2,
+      "total_ms": 64701.8,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4156.8
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 9714.6
+        },
+        {
+          "node": "execute",
+          "duration_ms": 5651.6
+        },
+        {
+          "node": "draft_sql",
+          "duration_ms": 23951.9
+        },
+        {
+          "node": "execute",
+          "duration_ms": 1820.1
+        },
+        {
+          "node": "critic",
+          "duration_ms": 16120.9
+        },
+        {
+          "node": "summarize",
+          "duration_ms": 3279.2
+        }
+      ]
+    },
+    {
+      "id": "t4-best-shooters",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "clarify",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "'Best shooters' could mean several different things: overall field goal percentage, three-point percentage, effective field goal percentage, or a volume-weighted measure. Which metric should define 'best,' and should I apply a minimum-attempts threshold (e.g., 200+ field goal attempts) to exclude small samples? For example, I could default to three-point percentage with a 100-attempt minimum, but that's a different answer than overall FG%.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 4641.6,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4639.1
+        },
+        {
+          "node": "clarify",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t4-most-clutch",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "clarify",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "\"Clutch\" needs a concrete definition before this can be queried. For example: do you mean most made shots (or highest FG%) in the last 5 minutes of a game with the score within 5 points, using shot_detail joined to pbp_event for game-clock/score context? Or most game-winning shots (made FG that puts the player's team ahead in the final seconds)? Or free-throw performance in close-and-late situations? Please specify the time window, score-margin threshold, and whether you want volume (count of clutch makes) or efficiency (clutch FG%) with a minimum-attempts cutoff -- these choices change who ranks first.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 5724.6,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 5722.3
+        },
+        {
+          "node": "clarify",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t4-improved-most",
+      "tier": 4,
+      "trap": false,
+      "expects": "clarify",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "Only one season (2023-24 regular season) is loaded in this database, so there is no prior season to compare against and no way to measure 'improvement' over time. This data cannot answer year-over-year or trend questions at all.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 3840.7,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3837.4
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t5-playoffs",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database only contains the 2023-24 regular season (season=2023, season_type='regular'). There is no playoff data loaded, so Jayson Tatum's 2024 playoff performance cannot be answered from this dataset.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 3532.4,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3529.4
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t5-prior-season",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database only contains the 2023-24 regular season (season=2023, season_type='regular'). There is no 2019 (or any other season) data loaded, and no playoff data, so a comparison between 2019 and 'this season' cannot be performed. I could only report LeBron James's shooting for the 2023-24 regular season alone, not a comparison.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 4794.2,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4791.9
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t5-player-height",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database has no player biographical data (no height, weight, position, etc.) \u2014 only play-by-play and shot event data. There is no way to filter players by height, so this question cannot be answered from this schema.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 3378.9,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3376.5
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t5-awards",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "This database contains only play-by-play event data and shot detail for the 2023-24 regular season (game events, shots, scores) -- there is no awards, voting, or biographical data of any kind. MVP winners are not derivable from event-level box score data, so this question cannot be answered from this data.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 4245.1,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 4242.8
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    },
+    {
+      "id": "t5-salary",
+      "tier": 5,
+      "trap": false,
+      "expects": "decline",
+      "outcome": "decline",
+      "outcome_correct": true,
+      "execution_correct": null,
+      "sql": null,
+      "summary": "The database contains only play-by-play event and shot detail data for the 2023-24 regular season; there is no salary or payroll information anywhere in the schema, so player compensation cannot be determined.",
+      "error": null,
+      "gold_error": null,
+      "mismatch": null,
+      "tool_calls": 0,
+      "total_ms": 3824.0,
+      "node_timings": [
+        {
+          "node": "classify",
+          "duration_ms": 3821.1
+        },
+        {
+          "node": "decline",
+          "duration_ms": 0.0
+        }
+      ]
+    }
+  ]
+}

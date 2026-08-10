@@ -15,6 +15,7 @@ const MIGRATIONS = [
   "0002_sandbox_ro_role.sql",
   "0003_app_schema.sql",
   "0004_agent_conversations.sql",
+  "0005_agent_budget_index.sql",
 ];
 
 const TEST_DB = "bball_web_test";
