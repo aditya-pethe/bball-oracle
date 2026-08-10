@@ -28,6 +28,7 @@ class AgentState(TypedDict, total=False):
     question: str
     user_id: int
     conversation_id: str | None
+    conversation_message_id: int | None
 
     # classify's verdict. Left unset (falls through to draft_sql) when the
     # question is answerable; set to "clarify"/"decline" to short-circuit
@@ -66,10 +67,17 @@ class AgentState(TypedDict, total=False):
     node_timings: Annotated[list[NodeTiming], operator.add]
     input_tokens: Annotated[int, operator.add]
     output_tokens: Annotated[int, operator.add]
+    cache_creation_input_tokens: Annotated[int, operator.add]
     cache_read_input_tokens: Annotated[int, operator.add]
 
 
-def new_state(question: str, user_id: int, conversation_id: str | None = None) -> AgentState:
+def new_state(
+    question: str,
+    user_id: int,
+    conversation_id: str | None = None,
+    *,
+    conversation_message_id: int | None = None,
+) -> AgentState:
     """The initial state every graph run must start from.
 
     The `Annotated[..., operator.add]` fields need a seed value -- the first
@@ -79,6 +87,7 @@ def new_state(question: str, user_id: int, conversation_id: str | None = None) -
         question=question,
         user_id=user_id,
         conversation_id=conversation_id,
+        conversation_message_id=conversation_message_id,
         outcome=None,
         clarify_question=None,
         decline_reason=None,
@@ -97,5 +106,6 @@ def new_state(question: str, user_id: int, conversation_id: str | None = None) -
         node_timings=[],
         input_tokens=0,
         output_tokens=0,
+        cache_creation_input_tokens=0,
         cache_read_input_tokens=0,
     )

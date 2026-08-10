@@ -5,9 +5,12 @@ type Props = {
   onChange: (value: string) => void;
   onSubmit: (question: string) => void;
   disabled: boolean;
+  /** Disabled *because a turn is in flight*, as opposed to the kill switch or a spent daily
+   * budget — the button says "Thinking…" only for the first. */
+  busy?: boolean;
 };
 
-export default function AgentComposer({ value, onChange, onSubmit, disabled }: Props) {
+export default function AgentComposer({ value, onChange, onSubmit, disabled, busy = false }: Props) {
   const submit = () => {
     const trimmed = value.trim();
     if (trimmed === "" || disabled) return;
@@ -36,7 +39,7 @@ export default function AgentComposer({ value, onChange, onSubmit, disabled }: P
         disabled={disabled || value.trim() === ""}
         className="rounded-panel bg-accent px-4 py-2 text-sm font-semibold text-accent-ink hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {disabled ? "Thinking…" : "Ask"}
+        {busy ? "Thinking…" : "Ask"}
       </button>
     </div>
   );

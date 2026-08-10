@@ -27,6 +27,7 @@ class FakeModelClient:
 
     scripts: dict[str, list[dict]]
     calls: list[str] = field(default_factory=list)
+    conversation_message_ids: list[int | None] = field(default_factory=list)
     messages_log: list[list[dict]] = field(default_factory=list)
 
     def complete(self, node: str, *, messages: list[dict], schema: dict) -> ModelReply:
@@ -36,7 +37,10 @@ class FakeModelClient:
         if not queue:
             raise AssertionError(f"no more scripted replies for node {node!r}")
         payload = queue.pop(0)
-        return ModelReply(payload=payload, input_tokens=10, output_tokens=5, cache_read_input_tokens=0)
+        return ModelReply(
+            payload=payload, input_tokens=10, output_tokens=5,
+            cache_creation_input_tokens=0, cache_read_input_tokens=0,
+        )
 
 
 @dataclass
@@ -46,8 +50,15 @@ class FakeExecutor:
 
     outcomes: list[ExecOutcome]
     calls: list[str] = field(default_factory=list)
+    conversation_message_ids: list[int | None] = field(default_factory=list)
 
-    def execute(self, sql: str, user_id: int) -> ExecOutcome:
+    def execute(
+        self,
+        sql: str,
+        user_id: int,
+        conversation_message_id: int | None = None,
+    ) -> ExecOutcome:
+        self.conversation_message_ids.append(conversation_message_id)
         self.calls.append(sql)
         if not self.outcomes:
             raise AssertionError("no more scripted executor outcomes")

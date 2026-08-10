@@ -74,7 +74,12 @@ class InternalQueryExecutor:
         self._timeout_s = timeout_s
         self._transport = transport
 
-    def execute(self, sql: str, user_id: int) -> ExecOutcome:
+    def execute(
+        self,
+        sql: str,
+        user_id: int,
+        conversation_message_id: int | None = None,
+    ) -> ExecOutcome:
         if not self._base_url or not self._token:
             raise RuntimeError(
                 "InternalQueryExecutor needs AGENT_API_BASE_URL and "
@@ -86,7 +91,16 @@ class InternalQueryExecutor:
             with httpx.Client(transport=self._transport, timeout=self._timeout_s) as client:
                 response = client.post(
                     f"{self._base_url}/api/internal/query",
-                    json={"sql": sql, "userId": user_id},
+                    json={
+                        "sql": sql,
+                        "userId": user_id,
+                        # Omitted when absent rather than sent as null: the
+                        # endpoint treats an absent field and an explicit null
+                        # identically, but omitting keeps eval traffic (which
+                        # has no conversation) off the linkage index.
+                        **({"conversationMessageId": conversation_message_id}
+                           if conversation_message_id is not None else {}),
+                    },
                     headers={"Authorization": f"Bearer {self._token}"},
                 )
         except httpx.HTTPError as err:

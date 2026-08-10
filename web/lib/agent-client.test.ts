@@ -33,10 +33,10 @@ function streamFrom(chunks: string[]) {
   });
 }
 
-function sseResponse(chunks: string[]) {
+function sseResponse(chunks: string[], headers: Record<string, string> = {}) {
   return new Response(streamFrom(chunks), {
     status: 200,
-    headers: { "content-type": "text/event-stream" },
+    headers: { "content-type": "text/event-stream", ...headers },
   });
 }
 
@@ -137,13 +137,35 @@ describe("streamAgentAnswer", () => {
 
     const events = await collect(streamAgentAnswer({ question: "How many shots?" }));
 
-    expect(events).toHaveLength(3);
-    expect(events[0]).toEqual({ type: "node", node: "classify", durationMs: 12.5 });
-    expect(events[1]).toEqual({ type: "node", node: "draft_sql", durationMs: 340 });
-    expect(events[2].type).toBe("done");
-    const done = events[2] as { type: "done"; envelope: { outcome: string; result: unknown } };
+    expect(events).toHaveLength(4);
+    expect(events[0].type).toBe("meta");
+    expect(events[1]).toEqual({ type: "node", node: "classify", durationMs: 12.5 });
+    expect(events[2]).toEqual({ type: "node", node: "draft_sql", durationMs: 340 });
+    expect(events[3].type).toBe("done");
+    const done = events[3] as { type: "done"; envelope: { outcome: string; result: unknown } };
     expect(done.envelope.outcome).toBe("answer");
     expect(done.envelope.result).toMatchObject({ status: "ok", rowCount: 1 });
+  });
+
+  it("reports the persisted ids from the response headers as the first event", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse(
+        ['event: done\ndata: {"outcome":"answer","summary":"s","sql":null,"result":null,"error":null}\n\n'],
+        { "x-conversation-id": "7", "x-conversation-message-id": "31" },
+      ),
+    );
+
+    const events = await collect(streamAgentAnswer({ question: "q" }));
+    expect(events[0]).toEqual({ type: "meta", conversationId: 7, conversationMessageId: 31 });
+  });
+
+  it("yields a meta event with null ids when the headers are absent", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse(['event: done\ndata: {"outcome":"answer","summary":"s","sql":null,"result":null,"error":null}\n\n']),
+    );
+
+    const events = await collect(streamAgentAnswer({ question: "q" }));
+    expect(events[0]).toEqual({ type: "meta", conversationId: null, conversationMessageId: null });
   });
 
   it("reassembles an SSE event split across multiple stream chunks", async () => {
@@ -158,8 +180,8 @@ describe("streamAgentAnswer", () => {
     );
 
     const events = await collect(streamAgentAnswer({ question: "q" }));
-    expect(events[0]).toEqual({ type: "node", node: "classify", durationMs: null });
-    expect((events[1] as { type: "done"; envelope: { outcome: string } }).envelope.outcome).toBe(
+    expect(events[1]).toEqual({ type: "node", node: "classify", durationMs: null });
+    expect((events[2] as { type: "done"; envelope: { outcome: string } }).envelope.outcome).toBe(
       "decline",
     );
   });
@@ -168,13 +190,13 @@ describe("streamAgentAnswer", () => {
     mockFetch.mockResolvedValue(
       sseResponse(['event: done\ndata: {"outcome":"answer","summary":"s","sql":null,"result":null,"error":null}\n\n']),
     );
-    await collect(streamAgentAnswer({ question: "How many threes?", conversationId: "conv-1" }));
+    await collect(streamAgentAnswer({ question: "How many threes?", conversationId: 12 }));
 
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/agent",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ question: "How many threes?", conversationId: "conv-1" }),
+        body: JSON.stringify({ question: "How many threes?", conversationId: 12 }),
       }),
     );
   });

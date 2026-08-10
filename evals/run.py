@@ -45,7 +45,7 @@ def build_executor(kind: str):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="evals.run")
-    parser.add_argument("--agent", default="baseline", choices=["baseline"])
+    parser.add_argument("--agent", default="baseline", choices=["baseline", "graph"])
     parser.add_argument("--cases", default=str(DEFAULT_CASES))
     parser.add_argument("--model", default=None)
     parser.add_argument("--effort", default=None,
@@ -68,14 +68,32 @@ def main(argv: list[str] | None = None) -> int:
     from evals.harness.report import RunMeta, build_run, format_summary, write_run
     from evals.harness.runner import RunnerConfig, run_suite
 
-    agent_executor = build_executor(args.executor)
     gold_executor = build_executor("direct")
 
-    agent = ZeroShotBaseline(
-        agent_executor,
-        model=args.model or DEFAULT_MODEL,
-        effort=args.effort,
-    )
+    if args.agent == "graph":
+        # SQL execution is not a harness SqlExecutor here -- it is baked into
+        # the graph itself (agent/nodes/execute.py -> agent/execute.py's
+        # InternalQueryExecutor), which reads AGENT_API_BASE_URL /
+        # AGENT_SERVICE_TOKEN directly from the environment. --executor
+        # governs only the baseline's SQL path and does not apply.
+        if args.executor != "direct":
+            print("--executor is ignored for --agent graph (see evals/run.py)", file=sys.stderr)
+        if args.effort:
+            print("--effort is ignored for --agent graph (per-node model config "
+                  "lives in agent/models.py)", file=sys.stderr)
+
+        from evals.harness.graph_agent import GraphAgent
+
+        agent = GraphAgent(model=args.model or DEFAULT_MODEL)
+        agent_executor_name = "graph (agent/execute.py InternalQueryExecutor -> AGENT_API_BASE_URL)"
+    else:
+        agent_executor = build_executor(args.executor)
+        agent = ZeroShotBaseline(
+            agent_executor,
+            model=args.model or DEFAULT_MODEL,
+            effort=args.effort,
+        )
+        agent_executor_name = agent_executor.name
 
     def progress(case, result):
         if case.is_execution_scored:
@@ -84,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             mark = "PASS" if result.outcome_correct else "FAIL"
         print(f"  [{mark}] {case.id}", file=sys.stderr, flush=True)
 
-    print(f"running {agent.name} (agent SQL via {agent_executor.name})", file=sys.stderr)
+    print(f"running {agent.name} (agent SQL via {agent_executor_name})", file=sys.stderr)
     results = run_suite(
         agent,
         args.cases,
@@ -97,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         agent=agent.name,
         case_file=Path(args.cases).name,
         model=args.model or DEFAULT_MODEL,
-        effort=args.effort,
+        effort=None if args.agent == "graph" else args.effort,
         note=args.note,
     )
     print()
