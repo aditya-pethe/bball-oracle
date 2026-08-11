@@ -50,14 +50,21 @@ Outcome = Literal["answer", "clarify", "decline"]
 # measurements -- not permanent product constants
 # (.agents/p5_conversational_context.md "Recommended initial bounds").
 #
-# 8 messages is roughly four completed exchanges. 5 preview rows is enough for
-# the drafter to see what the previous answer looked like without shipping a
-# result set. The byte ceiling is the backstop the other two cannot provide: a
-# single turn can carry a long SQL string or wide text cells, and "8 messages"
-# says nothing about how big a message is.
-MAX_CONTEXT_MESSAGES = 8
+# 16 messages is roughly eight completed exchanges. Raised from 8 on 2026-08-11:
+# eight was measured too tight on a real thread, where one answered question
+# followed by seven clarifications pushed the only answer out of the window. The
+# measured cost of carrying context was ~+30% input tokens per exchange with the
+# cache still serving over 90%, so the headroom is affordable.
+#
+# 5 preview rows is enough for the drafter to see what the previous answer looked
+# like without shipping a result set. The byte ceiling is the backstop the other
+# two cannot provide: a single turn can carry a long SQL string or wide text
+# cells, and "16 messages" says nothing about how big a message is. It scales
+# with the message cap so that raising one does not silently leave the other
+# binding first.
+MAX_CONTEXT_MESSAGES = 16
 MAX_PREVIEW_ROWS = 5
-MAX_SERIALIZED_BYTES = 8000
+MAX_SERIALIZED_BYTES = 16000
 
 
 class ResultShape(BaseModel):
@@ -205,26 +212,64 @@ def _pending_pair(turns: list[ConversationTurn]) -> tuple[int, int] | None:
     return None
 
 
+def _last_answered_pair(turns: list[ConversationTurn]) -> tuple[int, int] | None:
+    """Indices of (question, answer) for the most recent successfully answered
+    exchange -- the thing a follow-up actually needs and the drafter transforms."""
+    for index in range(len(turns) - 1, -1, -1):
+        if not turns[index].has_reusable_sql:
+            continue
+        for j in range(index - 1, -1, -1):
+            if turns[j].role == "user":
+                return (j, index)
+        return None
+    return None
+
+
+def _protected_indices(turns: list[ConversationTurn]) -> set[int]:
+    """Turns that survive trimming regardless of age.
+
+    Two of them, and both are exchanges rather than single turns, because half an
+    exchange resumes nothing:
+
+    - the most recent ANSWERED exchange. Trimming used to count messages, which
+      valued a content-free "I need clarification" turn exactly as highly as an
+      answer carrying SQL and results. Measured on a real thread on 2026-08-11:
+      one answered question followed by seven clarifications evicted the only
+      answer, leaving the model eight messages of its own requests for
+      clarification and nothing to anchor a follow-up to.
+    - an unresolved clarification, for the reason it always was: without the
+      original question, "you asked the user to clarify" is not a resumable task.
+    """
+    protected: set[int] = set()
+    pending = _pending_pair(turns)
+    if pending is not None:
+        protected.update(pending)
+    answered = _last_answered_pair(turns)
+    if answered is not None:
+        protected.update(answered)
+    return protected
+
+
 def _clamp_count(turns: list[ConversationTurn]) -> list[ConversationTurn]:
     if len(turns) <= MAX_CONTEXT_MESSAGES:
         return turns
 
-    pair = _pending_pair(turns)
-    window_start = len(turns) - MAX_CONTEXT_MESSAGES
-    if pair is None or pair[0] >= window_start:
-        return turns[-MAX_CONTEXT_MESSAGES:]
+    # Protected turns first, then fill the remaining budget from the most recent
+    # end backwards. Recency still governs everything that is not protected --
+    # what "that" or "him" refers to is almost always the previous turn.
+    keep = set(_protected_indices(turns))
+    budget = MAX_CONTEXT_MESSAGES - len(keep)
+    for index in range(len(turns) - 1, -1, -1):
+        if budget <= 0:
+            break
+        if index in keep:
+            continue
+        keep.add(index)
+        budget -= 1
 
-    # An unresolved clarification is retained even when the recent-window rule
-    # would drop it: without the original question, "you asked the user to
-    # clarify" is not a task anyone can resume.
-    #
-    # The pinned indices are excluded from the tail rather than assumed to be
-    # outside it. Only `pair[0]` is known to fall before the window; `pair[1]` is
-    # the LAST assistant turn, so with a long run of user turns after it, it can
-    # sit inside the tail and be rendered twice.
-    keep = MAX_CONTEXT_MESSAGES - 2
-    tail = [t for i, t in enumerate(turns) if i >= len(turns) - keep and i not in pair]
-    return [turns[pair[0]], turns[pair[1]], *tail][:MAX_CONTEXT_MESSAGES]
+    # Sorted, because the kept turns are spliced from two regions of the thread
+    # and a conversation rendered out of order is worse than a shorter one.
+    return [turns[index] for index in sorted(keep)]
 
 
 def _size(turns: list[ConversationTurn]) -> int:
@@ -254,15 +299,21 @@ def _shrink(turn: ConversationTurn) -> ConversationTurn:
 def _fit_bytes(turns: list[ConversationTurn]) -> list[ConversationTurn]:
     """The hard serialized-size ceiling, enforced before the service call.
 
-    Oldest turns go first, which is the same preference the count bound has. The
-    last turn is never dropped -- it is the one the current question is most
+    Oldest turns go first, and protected ones go last -- otherwise this stage
+    would silently undo `_clamp_count`'s work the moment a few turns carried long
+    SQL, dropping the answered exchange it had just gone out of its way to keep.
+    The protection is recomputed each pass because indices shift as turns leave.
+
+    The last turn is never dropped -- it is the one the current question is most
     likely to be a follow-up to, and an empty context reads to the model as "no
     history", which is a different (and wrong) statement than "history was too
     big to send".
     """
     turns = list(turns)
     while len(turns) > 1 and _size(turns) > MAX_SERIALIZED_BYTES:
-        turns.pop(0)
+        protected = _protected_indices(turns)
+        victim = next((i for i in range(len(turns)) if i not in protected), 0)
+        turns.pop(victim)
 
     guard = 0
     while turns and _size(turns) > MAX_SERIALIZED_BYTES and guard < 64:

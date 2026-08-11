@@ -16,12 +16,15 @@ import type { AgentMessage, AgentOutcome, QueryResult } from "./api-types";
  * node timings, token counts, and full result sets.
  */
 
-// Initial bounds, to be validated against multi-turn eval latency/token numbers.
 // Mirrored exactly in agent/context.py, which re-clamps on arrival — bounds that
-// only the producer applies are not bounds.
-export const MAX_CONTEXT_MESSAGES = 8;
+// only the producer applies are not bounds. Raised from 8/8000 on 2026-08-11:
+// eight messages was measured too tight on a real thread, where one answered
+// question followed by seven clarifications pushed the only answer out of the
+// window. The byte ceiling scales with the message cap so that raising one does
+// not leave the other silently binding first.
+export const MAX_CONTEXT_MESSAGES = 16;
 export const MAX_PREVIEW_ROWS = 5;
-export const MAX_SERIALIZED_BYTES = 8000;
+export const MAX_SERIALIZED_BYTES = 16000;
 
 export type ContextResultShape = {
   columns: string[];
@@ -112,24 +115,55 @@ function pendingPair(turns: ConversationTurn[]): [number, number] | null {
   return null;
 }
 
+/** Indices of (question, answer) for the most recent successfully answered
+ * exchange — the thing a follow-up needs and the drafter transforms. */
+function lastAnsweredPair(turns: ConversationTurn[]): [number, number] | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].outcome !== "answer" || !turns[i].sql) continue;
+    for (let j = i - 1; j >= 0; j--) if (turns[j].role === "user") return [j, i];
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Turns that survive trimming regardless of age. Both are exchanges rather than
+ * single turns, because half an exchange resumes nothing:
+ *
+ * - the most recent ANSWERED exchange. Trimming used to count messages, which
+ *   valued a content-free "I need clarification" turn exactly as highly as an
+ *   answer carrying SQL and results. Measured on a real thread on 2026-08-11: one
+ *   answered question followed by seven clarifications evicted the only answer,
+ *   leaving the model eight messages of its own clarification requests.
+ * - an unresolved clarification, for the reason it always was: without the
+ *   original question, "you asked the user to clarify" is not a resumable task.
+ */
+function protectedIndices(turns: ConversationTurn[]): Set<number> {
+  const keep = new Set<number>();
+  const pending = pendingPair(turns);
+  if (pending !== null) pending.forEach((i) => keep.add(i));
+  const answered = lastAnsweredPair(turns);
+  if (answered !== null) answered.forEach((i) => keep.add(i));
+  return keep;
+}
+
 function clampCount(turns: ConversationTurn[]): ConversationTurn[] {
   if (turns.length <= MAX_CONTEXT_MESSAGES) return turns;
 
-  const pair = pendingPair(turns);
-  const windowStart = turns.length - MAX_CONTEXT_MESSAGES;
-  if (pair === null || pair[0] >= windowStart) return turns.slice(-MAX_CONTEXT_MESSAGES);
+  // Protected turns first, then fill the remaining budget from the most recent end
+  // backwards. Recency still governs everything unprotected — what "that" or "him"
+  // refers to is almost always the previous turn.
+  const keep = protectedIndices(turns);
+  let budget = MAX_CONTEXT_MESSAGES - keep.size;
+  for (let i = turns.length - 1; i >= 0 && budget > 0; i--) {
+    if (keep.has(i)) continue;
+    keep.add(i);
+    budget--;
+  }
 
-  // An unresolved clarification is retained even when the recent-window rule
-  // would drop it: without the original question there is nothing to resume.
-  //
-  // The pinned indices are excluded from the tail rather than assumed to be outside
-  // it. Only pair[0] is known to fall before the window; pair[1] is the LAST
-  // assistant turn, so with a long run of user turns after it, it can sit inside the
-  // tail and be rendered twice.
-  const keep = MAX_CONTEXT_MESSAGES - 2;
-  const tailStart = turns.length - keep;
-  const tail = turns.filter((_, i) => i >= tailStart && i !== pair[0] && i !== pair[1]);
-  return [turns[pair[0]], turns[pair[1]], ...tail].slice(0, MAX_CONTEXT_MESSAGES);
+  // Sorted, because the kept turns are spliced from two regions of the thread and a
+  // conversation rendered out of order is worse than a shorter one.
+  return [...keep].sort((a, b) => a - b).map((i) => turns[i]);
 }
 
 function size(turns: ConversationTurn[]): number {
@@ -153,13 +187,23 @@ function shrink(turn: ConversationTurn): ConversationTurn {
 
 /**
  * The hard serialized-size ceiling, enforced before the service call. Oldest turns
- * go first; the last turn is never dropped, because an empty context reads to the
- * model as "no history" — a different, and wrong, statement than "history was too
- * big to send".
+ * go first and protected ones go last — otherwise this stage would silently undo
+ * clampCount's work the moment a few turns carried long SQL, dropping the answered
+ * exchange it had just gone out of its way to keep. Protection is recomputed each
+ * pass because indices shift as turns leave.
+ *
+ * The last turn is never dropped, because an empty context reads to the model as
+ * "no history" — a different, and wrong, statement than "history was too big to
+ * send".
  */
 function fitBytes(turns: ConversationTurn[]): ConversationTurn[] {
   let out = turns;
-  while (out.length > 1 && size(out) > MAX_SERIALIZED_BYTES) out = out.slice(1);
+  while (out.length > 1 && size(out) > MAX_SERIALIZED_BYTES) {
+    const keep = protectedIndices(out);
+    let victim = out.findIndex((_, i) => !keep.has(i));
+    if (victim === -1) victim = 0;
+    out = out.filter((_, i) => i !== victim);
+  }
   for (let guard = 0; out.length > 0 && size(out) > MAX_SERIALIZED_BYTES && guard < 64; guard++) {
     out = out.map(shrink);
   }

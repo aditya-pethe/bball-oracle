@@ -29,6 +29,7 @@ from typing import Callable
 from ..context import FOLLOW_UP_GUIDANCE, context_of, node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
+from .prompt import render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -65,19 +66,19 @@ RESPONSE_SCHEMA = {
 
 def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
     def classify(state: AgentState) -> dict:
-        parts = [
-            "Task: decide only whether the question below is answerable from "
-            "the schema above, before any SQL is written. Do not draft SQL."
-        ]
         # Only when there IS a conversation -- `has_exchange`, not `turns`. A window
         # of unanswered questions is not history, and instructing the model to
         # resolve references against it is worse than sending nothing
         # (.agents/p5_regression_report.md, 2026-08-10).
         context = context_of(state)
+        follow_up_guidance = ""
         if context is not None and context.has_exchange:
-            parts.append(FOLLOW_UP_GUIDANCE)
-        parts.append(f"Question: {task_question(state)}")
-        content = "\n\n".join(parts)
+            follow_up_guidance = f"\n\n{FOLLOW_UP_GUIDANCE}"
+        content = render(
+            "classify",
+            follow_up_guidance=follow_up_guidance,
+            question=task_question(state),
+        )
 
         reply = model_client.complete(
             "classify",
@@ -108,4 +109,3 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
         return update
 
     return classify
-

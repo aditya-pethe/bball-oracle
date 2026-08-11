@@ -219,3 +219,90 @@ describe("pending clarification", () => {
     expect(pendingClarification(context)?.originalQuestion).toBe("the original question");
   });
 });
+
+/**
+ * Mirrors agent/tests/test_context.py's TestValueAwareEviction case for case. The two
+ * halves of this contract must agree; asserting the same behaviour from both sides is
+ * the cheapest available guard until one of them is deleted.
+ */
+describe("value-aware eviction", () => {
+  function clarifyHeavyThread(clarifications = 12): AgentMessage[] {
+    const messages: AgentMessage[] = [
+      userMessage("What was the golden state warriors 2pt and 3pt fg% this past season?"),
+      assistantMessage({
+        summary: "For the 2023-24 regular season, the Warriors shot 54.8% on 2s.",
+        sql: "SELECT shot_type, COUNT(*) FROM nba.shot_detail GROUP BY shot_type",
+        result: okResult([["2PT Field Goal", 4324]], ["shot_type", "attempts"]),
+      }),
+    ];
+    for (let i = 0; i < clarifications; i++) {
+      messages.push(userMessage(`what about team ${i}`));
+      messages.push(
+        assistantMessage({ outcome: "clarify", summary: `Which metric did you mean, for team ${i}?` }),
+      );
+    }
+    return messages;
+  }
+
+  it("keeps the only answered exchange through a run of clarifications", () => {
+    const context = buildConversationContext(clarifyHeavyThread());
+    expect(context.turns.length).toBeLessThanOrEqual(MAX_CONTEXT_MESSAGES);
+
+    const texts = context.turns.map((t) => t.text).join(" | ");
+    expect(texts).toContain("golden state warriors");
+    expect(context.turns.some((t) => t.outcome === "answer" && t.sql)).toBe(true);
+  });
+
+  it("keeps the answered question together with its answer", () => {
+    const context = buildConversationContext(clarifyHeavyThread());
+    const i = context.turns.findIndex((t) => t.outcome === "answer" && t.sql);
+    expect(i).toBeGreaterThan(0);
+    expect(context.turns[i - 1].role).toBe("user");
+    expect(context.turns[i - 1].text).toContain("golden state warriors");
+  });
+
+  it("still preserves recency", () => {
+    const context = buildConversationContext(clarifyHeavyThread(12));
+    expect(context.turns[context.turns.length - 1].text).toBe(
+      "Which metric did you mean, for team 11?",
+    );
+  });
+
+  it("degrades to plain recency when every exchange is answered", () => {
+    const messages: AgentMessage[] = [];
+    for (let i = 0; i < 12; i++) {
+      messages.push(...exchange(`q${i}`, `a${i}`, `SELECT ${i}`));
+    }
+    const context = buildConversationContext(messages);
+    expect(context.turns).toHaveLength(MAX_CONTEXT_MESSAGES);
+    expect(context.turns[context.turns.length - 1].text).toBe("a11");
+  });
+
+  it("spares the answered exchange from the byte ceiling too", () => {
+    const messages: AgentMessage[] = [
+      userMessage("the answered question"),
+      assistantMessage({ summary: "answered", sql: "SELECT " + "x".repeat(900), result: okResult([[1]]) }),
+    ];
+    for (let i = 0; i < 10; i++) {
+      messages.push(userMessage(`filler ${i} ` + "y".repeat(400)));
+      messages.push(assistantMessage({ outcome: "clarify", summary: `clarify ${i}` }));
+    }
+    const context = buildConversationContext(messages);
+
+    expect(JSON.stringify(context).length).toBeLessThanOrEqual(MAX_SERIALIZED_BYTES);
+    expect(context.turns.some((t) => t.outcome === "answer" && t.sql)).toBe(true);
+  });
+
+  it("still pins an unresolved clarification alongside the answer", () => {
+    const messages: AgentMessage[] = [
+      userMessage("the answered question"),
+      assistantMessage({ summary: "answered", sql: "SELECT 1", result: okResult([[1]]) }),
+    ];
+    for (let i = 0; i < 10; i++) messages.push(...exchange(`noise ${i}`, `answered ${i}`, `SELECT ${i}`));
+    messages.push(userMessage("something ambiguous"));
+    messages.push(assistantMessage({ outcome: "clarify", summary: "which one?" }));
+
+    const context = buildConversationContext(messages);
+    expect(pendingClarification(context)?.originalQuestion).toBe("something ambiguous");
+  });
+});

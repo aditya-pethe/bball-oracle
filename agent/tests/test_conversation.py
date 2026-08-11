@@ -13,7 +13,13 @@ from __future__ import annotations
 
 import json
 
-from agent.context import ConversationContext, ConversationTurn, ResultShape
+from agent.context import (
+    MAX_CONTEXT_MESSAGES,
+    MAX_PREVIEW_ROWS,
+    ConversationContext,
+    ConversationTurn,
+    ResultShape,
+)
 from agent.execute import ExecOutcome, ExecResult
 from agent.graph import build_graph
 from agent.state import new_state
@@ -320,5 +326,5 @@ class TestWhatNeverReachesThePrompt:
             )
         context = ConversationContext(turns=turns)
 
-        assert len(context.turns) <= 8
-        assert len(context.turns[-1].result_preview) <= 5
+        assert len(context.turns) <= MAX_CONTEXT_MESSAGES
+        assert len(context.turns[-1].result_preview) <= MAX_PREVIEW_ROWS

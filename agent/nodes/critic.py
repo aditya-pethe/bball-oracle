@@ -28,6 +28,7 @@ from typing import Callable
 from ..context import node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
+from .prompt import render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -74,12 +75,11 @@ def _result_summary(state: AgentState) -> str:
 
 def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
     def critic(state: AgentState) -> dict:
-        content = (
-            "Task: compare this question against the SQL and result below. "
-            "Reject only if you can name a concrete mismatch; otherwise ok.\n\n"
-            f"Question: {task_question(state)}\n\n"
-            f"SQL:\n{state.get('sql')}\n\n"
-            f"Result: {_result_summary(state)}"
+        content = render(
+            "critic",
+            question=task_question(state),
+            sql=state.get("sql"),
+            result=_result_summary(state),
         )
         reply = model_client.complete(
             "critic",

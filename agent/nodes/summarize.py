@@ -29,6 +29,7 @@ from ..context import node_messages, task_question
 from ..execute import ExecResult
 from ..llm import ModelClient
 from ..state import AgentState
+from .prompt import render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -68,10 +69,11 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
         if unresolved_error and state.get("result") is None:
             return {"outcome": "answer", "error": unresolved_error}
 
-        content = (
-            f"Question: {task_question(state)}\n\n"
-            f"SQL:\n{state.get('sql')}\n\n"
-            f"Result: {_result_for_prompt(state.get('result'))}"
+        content = render(
+            "summarize",
+            question=task_question(state),
+            sql=state.get("sql"),
+            result=_result_for_prompt(state.get("result")),
         )
         reply = model_client.complete(
             "summarize",

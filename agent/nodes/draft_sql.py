@@ -29,6 +29,7 @@ from typing import Callable
 from ..context import TRANSFORM_GUIDANCE, context_of, node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
+from .prompt import render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -56,63 +57,43 @@ def _retry_instruction(state: AgentState) -> str | None:
 
     # Rung 2: validator rejection (server-side libpg-query, via /api/internal/query).
     if validation_error is not None:
-        return (
-            f"Your previous SQL was rejected by the validator before it ran:\n"
-            f"{validation_error}\n\n"
-            f"Previous SQL:\n{prior_sql}\n\n"
-            "Fix it -- almost certainly it wasn't a single, schema-qualified "
-            "SELECT statement. Address this specific rejection, don't just "
-            "rewrite from scratch."
-        )
+        return render("retry_validation", error=validation_error, sql=prior_sql)
     # Rungs 1 and 3 both surface as execute_error, distinguished by message.
     if execute_error is not None:
         if execute_error == "query returned zero rows":
-            return (
-                "Your previous SQL ran without error but returned zero rows:\n\n"
-                f"Previous SQL:\n{prior_sql}\n\n"
-                "That is almost always a filter, join key, or literal-matching "
-                "problem (e.g. a name spelled differently than it's stored, an "
-                "overly strict WHERE, a bad join condition) -- find and fix the "
-                "specific cause rather than redrafting from scratch."
-            )
-        return (
-            f"Your previous SQL failed when it ran:\n{execute_error}\n\n"
-            f"Previous SQL:\n{prior_sql}\n\n"
-            "Fix the specific error above -- most likely a column name, type "
-            "mismatch, or syntax mistake."
-        )
+            return render("retry_zero_rows", sql=prior_sql)
+        return render("retry_execute", error=execute_error, sql=prior_sql)
     # Rung 4: critic rejection.
     if critic_feedback is not None:
-        return (
-            f"A reviewer compared your previous SQL and its result against the "
-            f"question and rejected it:\n{critic_feedback}\n\n"
-            f"Previous SQL:\n{prior_sql}\n\n"
-            "Write SQL that actually answers what was asked, addressing this "
-            "specific mismatch."
-        )
+        return render("retry_critic", feedback=critic_feedback, sql=prior_sql)
     return None
 
 
 def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
     def draft_sql(state: AgentState) -> dict:
-        parts = [f"Question: {task_question(state)}"]
-
         # Only when there is a previous SUCCESSFUL query above to transform --
         # `last_reusable_turn` skips failed and abstained turns, so this never
         # points the drafter at a query that did not work.
         context = context_of(state)
+        transform_guidance = ""
         if context is not None and context.last_reusable_turn is not None:
-            parts.append(TRANSFORM_GUIDANCE)
+            transform_guidance = f"\n\n{TRANSFORM_GUIDANCE}"
 
         # Last, so a correction dominates: a retry's job is to fix the specific
         # failure, not to weigh it against conversational guidance.
         retry_note = _retry_instruction(state)
-        if retry_note:
-            parts.append(retry_note)
+        retry_instruction = f"\n\n{retry_note}" if retry_note else ""
+
+        content = render(
+            "draft_sql",
+            question=task_question(state),
+            transform_guidance=transform_guidance,
+            retry_instruction=retry_instruction,
+        )
 
         reply = model_client.complete(
             "draft_sql",
-            messages=node_messages(state, "draft_sql", "\n\n".join(parts)),
+            messages=node_messages(state, "draft_sql", content),
             schema=RESPONSE_SCHEMA,
         )
         sql = reply.payload.get("sql")

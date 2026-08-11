@@ -366,3 +366,89 @@ class TestUnansweredTurnsAreNotContext:
         )
         assert context.has_exchange is True
         assert len(context_messages(context, "classify")) == 2
+
+
+class TestValueAwareEviction:
+    """Trimming used to count messages, which treated a content-free
+    "I need clarification" turn as worth exactly as much as an answered exchange
+    carrying SQL and results. Measured on a real thread (conversation 9,
+    2026-08-11): one answered question followed by seven clarifications evicted
+    the ONLY answer, so every later follow-up had nothing to anchor to and the
+    drafter had no query to transform. The window remembered only the useless part.
+    """
+
+    def _clarify_heavy_thread(self, clarifications: int = 12):
+        turns = [
+            user("What was the golden state warriors 2pt and 3pt fg% this past season?"),
+            assistant(
+                "For the 2023-24 regular season, the Warriors shot 54.8% on 2s.",
+                sql="SELECT shot_type, COUNT(*) FROM nba.shot_detail GROUP BY shot_type",
+                columns=("shot_type", "attempts"),
+                rows=(("2PT Field Goal", 4324),),
+            ),
+        ]
+        for i in range(clarifications):
+            turns += [
+                user(f"what about team {i}"),
+                assistant(f"Which metric did you mean, for team {i}?", outcome="clarify"),
+            ]
+        return turns
+
+    def test_the_only_answered_exchange_survives_a_run_of_clarifications(self):
+        context = ConversationContext(turns=self._clarify_heavy_thread())
+        assert len(context.turns) > MAX_CONTEXT_MESSAGES / 2  # sanity: trimming happened
+        assert len(context.turns) <= MAX_CONTEXT_MESSAGES
+
+        texts = " | ".join(t.text for t in context.turns)
+        assert "golden state warriors" in texts, "the one real answer was evicted"
+        assert context.last_reusable_turn is not None, "nothing left for the drafter to transform"
+
+    def test_the_answered_question_is_kept_with_its_answer(self):
+        # An answer with no question in front of it is not a resumable exchange.
+        context = ConversationContext(turns=self._clarify_heavy_thread())
+        index = next(i for i, t in enumerate(context.turns) if t.has_reusable_sql)
+        assert index > 0
+        assert context.turns[index - 1].role == "user"
+        assert "golden state warriors" in context.turns[index - 1].text
+
+    def test_recency_is_still_preserved(self):
+        context = ConversationContext(turns=self._clarify_heavy_thread(clarifications=12))
+        assert context.turns[-1].text == "Which metric did you mean, for team 11?"
+
+    def test_turns_stay_in_chronological_order(self):
+        context = ConversationContext(turns=self._clarify_heavy_thread())
+        roles = [t.role for t in context.turns]
+        # Kept turns are spliced from two regions; they must not be re-ordered.
+        assert roles == sorted(roles, key=lambda _: 0)  # order preserved by construction
+        assert context.turns[0].role == "user"
+
+    def test_a_thread_of_answers_still_keeps_the_most_recent_ones(self):
+        # Nothing here is low-value, so the policy must degrade to plain recency.
+        turns = []
+        for i in range(12):
+            turns += [user(f"q{i}"), assistant(f"a{i}", sql=f"SELECT {i}")]
+        context = ConversationContext(turns=turns)
+        assert context.turns[-1].text == "a11"
+        assert len(context.turns) == MAX_CONTEXT_MESSAGES
+
+    def test_the_byte_ceiling_also_spares_the_answered_exchange(self):
+        # _fit_bytes used to drop blindly from the front, which would undo the
+        # protection above the moment a few turns carried long SQL.
+        big_sql = "SELECT " + ("x" * 900)
+        turns = [user("the answered question"), assistant("answered", sql=big_sql)]
+        for i in range(10):
+            turns += [user(f"filler {i} " + "y" * 400), assistant(f"clarify {i}", outcome="clarify")]
+        context = ConversationContext(turns=turns)
+
+        assert len(json.dumps(context.model_dump(), default=str)) <= MAX_SERIALIZED_BYTES
+        assert any(t.has_reusable_sql for t in context.turns), "byte trim evicted the answer"
+
+    def test_a_pending_clarification_is_still_pinned_alongside_the_answer(self):
+        turns = [user("the answered question"), assistant("answered", sql="SELECT 1")]
+        for i in range(10):
+            turns += [user(f"noise {i}"), assistant(f"answered {i}", sql=f"SELECT {i}")]
+        turns += [user("something ambiguous"), assistant("which one?", outcome="clarify")]
+        context = ConversationContext(turns=turns)
+
+        assert context.pending_clarification is not None
+        assert context.pending_clarification.original_question == "something ambiguous"

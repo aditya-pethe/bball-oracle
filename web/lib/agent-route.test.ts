@@ -15,6 +15,7 @@ vi.mock("./require-session", () => ({ requireSession: vi.fn() }));
 
 import { requireSession } from "./require-session";
 import { closePools } from "./execute-query";
+import { MAX_CONTEXT_MESSAGES } from "./conversation-context";
 import { GET, POST } from "../app/api/agent/route";
 
 const mockSession = vi.mocked(requireSession);
@@ -543,7 +544,7 @@ describe("conversation context", () => {
       mockFetch.mockReset();
       conversationId = await ask(`q${i}`, conversationId);
     }
-    expect(sentContext().turns.length).toBeLessThanOrEqual(8);
+    expect(sentContext().turns.length).toBeLessThanOrEqual(MAX_CONTEXT_MESSAGES);
   });
 });
 
