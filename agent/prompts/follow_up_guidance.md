@@ -1,0 +1,1 @@
+The question may be a follow-up to the conversation above -- resolve any pronoun, ellipsis, or implied filter ('what about X?', 'only in the fourth quarter', 'break that down') against the previous turns. If it starts a new topic instead, answer it on its own and carry no entity or filter forward.

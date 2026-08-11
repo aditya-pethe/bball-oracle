@@ -42,6 +42,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from .envelope import AgentEnvelope, ExecResult
+from .prompts import render
 
 Role = Literal["user", "assistant"]
 Outcome = Literal["answer", "clarify", "decline"]
@@ -396,14 +397,11 @@ def resolve_question(question: str, context: ConversationContext | None) -> str:
     pending = context.pending_clarification if context else None
     if pending is None:
         return question
-    return (
-        "This is a continuation of a clarification you asked for. Treat the "
-        "three parts below as one request.\n\n"
-        f"The user originally asked: {pending.original_question}\n"
-        f"You asked them to clarify: {pending.clarify_question}\n"
-        f"They answered: {question}\n\n"
-        "Answer the original question using their answer. Do not ask the same "
-        "clarifying question again."
+    return render(
+        "clarification_continuation",
+        original_question=pending.original_question,
+        clarify_question=pending.clarify_question,
+        answer=question,
     )
 
 
@@ -521,27 +519,6 @@ def build_messages(
 # ---------------------------------------------------------------------------
 # What nodes call
 # ---------------------------------------------------------------------------
-
-# Added to the classifier's task only when there is a conversation to resolve
-# against. A follow-up and a new topic are both ordinary things for a user to
-# type next, and the failure this guards is the second one: silently carrying a
-# previous entity or filter into a question that changed the subject.
-FOLLOW_UP_GUIDANCE = (
-    "The question may be a follow-up to the conversation above -- resolve any "
-    "pronoun, ellipsis, or implied filter ('what about X?', 'only in the fourth "
-    "quarter', 'break that down') against the previous turns. If it starts a new "
-    "topic instead, answer it on its own and carry no entity or filter forward."
-)
-
-# Added to the drafter only when there is a previous successful query to work from.
-TRANSFORM_GUIDANCE = (
-    "If this question refines the previous one, transform the previous SQL above "
-    "rather than starting over -- keep the filters and metric that still apply and "
-    "change only what the user asked to change. If the topic changed, write a fresh "
-    "query and reuse nothing. Either way emit one complete, standalone SELECT: never "
-    "a fragment, a diff, or a patch to the previous query."
-)
-
 
 def context_of(state: Mapping[str, Any]) -> ConversationContext | None:
     return state.get("conversation_context")

@@ -1,0 +1,1 @@
+If this question refines the previous one, transform the previous SQL above rather than starting over -- keep the filters and metric that still apply and change only what the user asked to change. If the topic changed, write a fresh query and reuse nothing. Either way emit one complete, standalone SELECT: never a fragment, a diff, or a patch to the previous query.

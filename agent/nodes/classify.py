@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..context import FOLLOW_UP_GUIDANCE, context_of, node_messages, task_question
+from ..context import context_of, node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
-from .prompt import render
+from ..prompts import load, render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -73,7 +73,7 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
         context = context_of(state)
         follow_up_guidance = ""
         if context is not None and context.has_exchange:
-            follow_up_guidance = f"\n\n{FOLLOW_UP_GUIDANCE}"
+            follow_up_guidance = f"\n\n{load('follow_up_guidance')}"
         content = render(
             "classify",
             follow_up_guidance=follow_up_guidance,

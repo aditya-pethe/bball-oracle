@@ -29,7 +29,7 @@ from ..context import node_messages, task_question
 from ..execute import ExecResult
 from ..llm import ModelClient
 from ..state import AgentState
-from .prompt import render
+from ..prompts import render
 
 RESPONSE_SCHEMA = {
     "type": "object",

@@ -26,10 +26,10 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..context import TRANSFORM_GUIDANCE, context_of, node_messages, task_question
+from ..context import context_of, node_messages, task_question
 from ..llm import ModelClient
+from ..prompts import load, render
 from ..state import AgentState
-from .prompt import render
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -77,7 +77,7 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
         context = context_of(state)
         transform_guidance = ""
         if context is not None and context.last_reusable_turn is not None:
-            transform_guidance = f"\n\n{TRANSFORM_GUIDANCE}"
+            transform_guidance = f"\n\n{load('transform_guidance')}"
 
         # Last, so a correction dominates: a retry's job is to fix the specific
         # failure, not to weigh it against conversational guidance.
