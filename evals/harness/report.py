@@ -29,6 +29,7 @@ def _metrics_dict(metrics: Metrics) -> dict[str, Any]:
         "total": metrics.total,
         "answerable": metrics.answerable,
         "execution_accuracy": round(metrics.execution_accuracy, 4),
+        "outcome_accuracy": round(metrics.outcome_accuracy, 4),
         "valid_sql_rate": round(metrics.valid_sql_rate, 4),
         "abstention_recall": round(metrics.abstention_recall, 4),
         "abstention_precision": round(metrics.abstention_precision, 4),
@@ -160,6 +161,4 @@ def format_summary(results: list[CaseResult], meta: RunMeta) -> str:
 
 
 def _passed(result: CaseResult) -> bool:
-    if result.case.is_execution_scored:
-        return result.execution_correct
-    return result.outcome_correct
+    return result.passed

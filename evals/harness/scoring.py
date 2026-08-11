@@ -49,6 +49,17 @@ class CaseResult:
         return self.comparison is not None and self.comparison.matches
 
     @property
+    def passed(self) -> bool:
+        """One number for "did this case go right", whichever way it is scored.
+
+        Execution-scored cases pass on matching rows; judgment-scored cases pass on
+        picking the right kind of response. Lives here rather than in report.py
+        because whole-conversation success (conversation_scoring.py) needs the same
+        definition, and two copies of it would eventually disagree.
+        """
+        return self.execution_correct if self.case.is_execution_scored else self.outcome_correct
+
+    @property
     def produced_valid_sql(self) -> bool:
         return (
             self.envelope.sql is not None
@@ -68,6 +79,9 @@ class Metrics:
     answerable: int = 0
     execution_correct: int = 0
     valid_sql: int = 0
+    # Right *kind* of response (answer/clarify/decline), across every case rather
+    # than only the abstention ones. The multi-turn suite reports this per turn.
+    outcome_correct: int = 0
 
     should_abstain: int = 0
     did_abstain_when_should: int = 0
@@ -90,6 +104,12 @@ class Metrics:
     @property
     def valid_sql_rate(self) -> float:
         return _pct(self.valid_sql, self.answerable)
+
+    @property
+    def outcome_accuracy(self) -> float:
+        """How often the agent picked the right kind of response at all — before
+        asking whether the rows were also right."""
+        return _pct(self.outcome_correct, self.total)
 
     @property
     def abstention_recall(self) -> float:
@@ -161,6 +181,9 @@ def score(results: list[CaseResult]) -> Metrics:
 
         if result.gold_error:
             metrics.gold_errors += 1
+
+        if result.outcome_correct:
+            metrics.outcome_correct += 1
 
         if result.abstained:
             metrics.did_abstain_total += 1

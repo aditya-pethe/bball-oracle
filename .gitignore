@@ -15,3 +15,8 @@ __pycache__/
 
 # Agent-tool worktrees (created/removed by the harness, never committed)
 .claude/worktrees/
+
+# Vitest/vite caches land here when a tool is run from the repo root rather than
+# from web/. web/.gitignore's `/node_modules` is anchored to web/ and does not
+# cover this one.
+node_modules/

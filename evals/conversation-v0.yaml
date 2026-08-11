@@ -1,0 +1,374 @@
+# Multi-turn conversation eval set v0 — seed cases, PENDING HUMAN REVIEW
+#
+# Phase 5 (.agents/p5_conversational_context.md). Separate from text2sql-v0.yaml on
+# purpose: that file stays byte-identical this phase so single-turn results remain
+# directly comparable with the Phase 4 baseline of record.
+#
+# Every `gold_sql` below has been executed against the live 2023-24 dataset through
+# `sandbox_ro` and returns rows. The QUESTIONS and the EXPECTED BEHAVIOR are
+# proposals for Aditya to vet, not settled truth — same status as text2sql-v0.yaml.
+#
+# Scoring model (per turn, identical to the single-turn suite):
+#   expects: answer  -> execution accuracy. Run gold_sql and the agent's SQL,
+#                       compare result sets (ignore column names; ignore row order
+#                       unless order_matters: true; float tolerance 1e-6).
+#   expects: clarify -> the agent must ask before running SQL. Judged by `rubric`;
+#                       automated scoring checks the outcome only.
+#   expects: decline -> the agent must state the data cannot answer this.
+#
+# Conversation-only fields:
+#   reset: true      -> this turn changes the subject. Scored by context-reset
+#                       accuracy: passing means it did NOT inherit the previous
+#                       topic's entity or filters. Illegal on a first turn.
+#   (derived)        -> a turn after an `expects: clarify` turn is automatically a
+#                       clarification continuation. Never declared in the file, so a
+#                       case cannot claim a continuation its turns do not contain.
+#
+# Every follow-up here is deliberately unanswerable in isolation: "What about
+# Damian Lillard?" and "Only in the fourth quarter." mean nothing without the turn
+# before them. That is the point — an agent that ignores context cannot pass these
+# by luck, and `--agent baseline` (which runs each turn context-free) is the control
+# that shows it.
+#
+# Coverage, per the plan: two entity substitutions, two filter refinements, two
+# breakdowns, one comparison, two clarification continuations, one topic reset, one
+# four-turn chain, one follow-up after a decline asking for the offered proxy.
+#
+# NO new valid-but-wrong traps in this phase — deferred, so a conversational
+# regression cannot be confused with a trap regression.
+#
+# Dataset facts these cases depend on (same as text2sql-v0.yaml):
+#   - ONLY the 2023-24 regular season is loaded (season=2023, season_type='regular')
+#   - nba.shot_detail: field goals only — NO free throws
+#   - "final two minutes" follows the existing convention in text2sql-v0.yaml's
+#     t3-clutch-three-pct: period = 4 AND minutes_remaining < 2
+
+cases:
+  # ---------- Entity substitution ----------
+  - id: conv-entity-curry-lillard
+    tier: 1
+    notes: >
+      The plainest possible follow-up. "What about X?" carries no metric, no
+      filter, and no table — every one of those has to come from turn 1.
+    turns:
+      - user: How many three-pointers did Stephen Curry make?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made_threes
+          FROM nba.shot_detail
+          WHERE player_name = 'Stephen Curry'
+            AND shot_type = '3PT Field Goal'
+            AND shot_made_flag = 1
+
+      - user: What about Damian Lillard?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made_threes
+          FROM nba.shot_detail
+          WHERE player_name = 'Damian Lillard'
+            AND shot_type = '3PT Field Goal'
+            AND shot_made_flag = 1
+
+  - id: conv-entity-jokic-embiid-zone
+    tier: 2
+    notes: >
+      Entity substitution where the preserved part is a GROUP BY + ORDER BY +
+      LIMIT 1, not just a WHERE clause.
+    turns:
+      - user: What was Nikola Jokic's most common shot zone?
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT shot_zone_basic, COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE player_name = 'Nikola Jokic'
+          GROUP BY shot_zone_basic
+          ORDER BY attempts DESC
+          LIMIT 1
+
+      - user: And for Joel Embiid?
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT shot_zone_basic, COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE player_name = 'Joel Embiid'
+          GROUP BY shot_zone_basic
+          ORDER BY attempts DESC
+          LIMIT 1
+
+  # ---------- Filter refinement ----------
+  - id: conv-filter-fourth-quarter
+    tier: 2
+    notes: >
+      An added filter, phrased as a sentence fragment with no verb. The entity and
+      the metric both have to survive.
+    turns:
+      - user: How many shots did Luka Doncic attempt?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE player_name = 'Luka Doncic'
+
+      - user: Only in the fourth quarter.
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE player_name = 'Luka Doncic'
+            AND period = 4
+
+  - id: conv-filter-threes-only
+    tier: 2
+    notes: >
+      Narrowing a team-level count to one shot type. The `shot_made_flag = 1`
+      filter from turn 1 must be kept, not replaced.
+    turns:
+      - user: How many field goals did the Boston Celtics make?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE team_name = 'Boston Celtics'
+            AND shot_made_flag = 1
+
+      - user: Just the three-pointers.
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE team_name = 'Boston Celtics'
+            AND shot_made_flag = 1
+            AND shot_type = '3PT Field Goal'
+
+  # ---------- Breakdown / regrouping ----------
+  - id: conv-breakdown-by-period
+    tier: 2
+    notes: >
+      "That" refers to the previous result, and the requested change is the
+      grouping — population and metric both stay.
+    turns:
+      - user: How many shots did Stephen Curry make?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE player_name = 'Stephen Curry'
+            AND shot_made_flag = 1
+
+      - user: Break that down by period.
+        expects: answer
+        gold_sql: |
+          SELECT period, COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE player_name = 'Stephen Curry'
+            AND shot_made_flag = 1
+          GROUP BY period
+
+  - id: conv-breakdown-by-zone
+    tier: 2
+    notes: League-wide breakdown, so the preserved part is two filters and no entity.
+    turns:
+      - user: How many three-pointers were made all season?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made_threes
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+            AND shot_made_flag = 1
+
+      - user: Break that down by shot zone.
+        expects: answer
+        gold_sql: |
+          SELECT shot_zone_basic, COUNT(*) AS made_threes
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+            AND shot_made_flag = 1
+          GROUP BY shot_zone_basic
+
+  # ---------- Comparison ----------
+  - id: conv-comparison-jokic-embiid
+    tier: 2
+    notes: >
+      "Him" has to resolve to Jokic AND the second entity has to be added rather
+      than substituted — the failure mode here is answering for Embiid alone.
+    turns:
+      - user: How many shots did Nikola Jokic make?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE player_name = 'Nikola Jokic'
+            AND shot_made_flag = 1
+
+      - user: Compare him with Joel Embiid.
+        expects: answer
+        gold_sql: |
+          SELECT player_name, COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE player_name IN ('Nikola Jokic', 'Joel Embiid')
+            AND shot_made_flag = 1
+          GROUP BY player_name
+
+  # ---------- Clarification continuation ----------
+  - id: conv-clarify-clutch
+    tier: 4
+    notes: >
+      The behavior Phase 5 exists to add: the user's second message answers a
+      question the agent asked, and is meaningless on its own. Turn 2 must resume
+      the ORIGINAL question ("who was most clutch") using the supplied definition,
+      not treat "the final two minutes of the fourth quarter" as a new request.
+    turns:
+      - user: Who was the most clutch shooter?
+        expects: clarify
+        rubric: >
+          "Clutch" has no canonical definition in this schema. PASS if the agent
+          asks for one (time remaining, score margin, and the metric being
+          measured) or states plainly the definition it is adopting and why. FAIL
+          if it silently invents one and presents the result as settled.
+
+      - user: >
+          Define it as the final two minutes of the fourth quarter — who made the
+          most shots then?
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT player_name, COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE period = 4
+            AND minutes_remaining < 2
+            AND shot_made_flag = 1
+          GROUP BY player_name
+          ORDER BY made DESC
+          LIMIT 1
+
+  - id: conv-clarify-best-shooter
+    tier: 4
+    notes: >
+      A clarification answered with a definition AND a threshold. Turn 2 supplies
+      both axes the agent should have asked about; asking again for either is a
+      continuation failure.
+    turns:
+      - user: Who is the best three-point shooter?
+        expects: clarify
+        rubric: >
+          "Best" is undefined along at least two axes — efficiency vs volume — and
+          a percentage leaderboard needs a minimum-attempts threshold or it fills
+          with players who went 1-for-1. PASS if the agent asks which is meant, or
+          proposes one explicitly and states the threshold it chose. FAIL if it
+          silently emits an unqualified leaderboard.
+
+      - user: >
+          By percentage, among players with at least 200 three-point attempts.
+          Give me the top 10.
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT player_name,
+                 COUNT(*) AS attempts,
+                 ROUND(AVG(shot_made_flag) * 100, 1) AS three_pct
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+          GROUP BY player_name
+          HAVING COUNT(*) >= 200
+          ORDER BY three_pct DESC
+          LIMIT 10
+
+  # ---------- Topic reset ----------
+  - id: conv-topic-reset
+    tier: 2
+    notes: >
+      The inverse failure of every case above: turn 2 shares no entity, metric or
+      filter with turn 1, and an agent that carries the leaderboard's player
+      grouping forward gets it wrong. Context has to be usable AND droppable.
+    turns:
+      - user: Which 10 players attempted the most shots?
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT player_name, COUNT(*) AS attempts
+          FROM nba.shot_detail
+          GROUP BY player_name
+          ORDER BY attempts DESC
+          LIMIT 10
+
+      - user: "New question: how many games are covered by this data?"
+        expects: answer
+        reset: true
+        gold_sql: |
+          SELECT COUNT(DISTINCT game_id) AS games
+          FROM nba.shot_detail
+
+  # ---------- Long chain ----------
+  - id: conv-chain-corner-threes
+    tier: 3
+    notes: >
+      Four turns, each depending on every turn before it. By turn 4 the query has
+      accumulated a shot-type filter, a zone filter, a grouping and an ordering,
+      and no single turn states more than one of them.
+    turns:
+      - user: How many three-pointers were attempted this season?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+
+      - user: How many of those were from the corners?
+        expects: answer
+        gold_sql: |
+          SELECT COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+            AND shot_zone_basic IN ('Left Corner 3', 'Right Corner 3')
+
+      - user: Break that down by team.
+        expects: answer
+        gold_sql: |
+          SELECT team_name, COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+            AND shot_zone_basic IN ('Left Corner 3', 'Right Corner 3')
+          GROUP BY team_name
+
+      - user: Which team took the most?
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT team_name, COUNT(*) AS attempts
+          FROM nba.shot_detail
+          WHERE shot_type = '3PT Field Goal'
+            AND shot_zone_basic IN ('Left Corner 3', 'Right Corner 3')
+          GROUP BY team_name
+          ORDER BY attempts DESC
+          LIMIT 1
+
+  # ---------- Follow-up after a decline ----------
+  - id: conv-decline-then-proxy
+    tier: 5
+    notes: >
+      A decline is not the end of a conversation. Turn 1 must refuse (no awards
+      data); turn 2 asks for the supported statistic the decline should have
+      offered as a proxy. The failure to catch here is a second decline — an agent
+      that treats "I already said no" as the context rather than "here is what I
+      CAN show you".
+    turns:
+      - user: Who won MVP?
+        expects: decline
+        rubric: >
+          No awards data exists. PASS if the agent declines, optionally offering a
+          statistical proxy while making clear the proxy is not the award. FAIL if
+          it answers from model knowledge — a correct answer is more dangerous, not
+          less, because it teaches the user the tool knows things it cannot source.
+
+      - user: Then just show me who made the most field goals.
+        expects: answer
+        order_matters: true
+        gold_sql: |
+          SELECT player_name, COUNT(*) AS made
+          FROM nba.shot_detail
+          WHERE shot_made_flag = 1
+          GROUP BY player_name
+          ORDER BY made DESC
+          LIMIT 1

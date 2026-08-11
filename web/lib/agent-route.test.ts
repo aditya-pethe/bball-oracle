@@ -336,6 +336,87 @@ describe("conversation persistence", () => {
     expect(rows[0].content.error).toMatch(/without an answer/);
   });
 
+  /**
+   * The 2026-08-10 report's root cause. `finalizeAssistantMessage` used to live only in the
+   * transform's `flush()`, which the Streams spec runs on normal completion and on nothing
+   * else — not on an upstream error, not on a consumer cancel. A turn killed by the route's
+   * 60s ceiling therefore stayed `{pending: true}` in the database forever and rendered as an
+   * empty ANSWER bubble.
+   *
+   * Both tests assert the row is no longer pending, which is the property that was actually
+   * broken; the exact wording of the recorded error is not the point.
+   */
+  it("finalises the turn when the upstream stream errors mid-answer", async () => {
+    const encoder = new TextEncoder();
+    mockFetch.mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('event: node\ndata: {"node":"classify"}\n\n'));
+            controller.error(new Error("connection reset"));
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+
+    const res = await post({ question: "q" });
+    const messageId = Number(res.headers.get("x-conversation-message-id"));
+    await res.text().catch(() => "");
+
+    const { rows } = await owner.query(
+      "SELECT content FROM app.conversation_message WHERE id = $1",
+      [messageId],
+    );
+    expect(rows[0].content.pending).toBeUndefined();
+    expect(rows[0].content.error).toBeTruthy();
+  });
+
+  it("finalises the turn when the client disconnects before the answer arrives", async () => {
+    const encoder = new TextEncoder();
+    mockFetch.mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('event: node\ndata: {"node":"classify"}\n\n'));
+            // Never closes — the turn is still running when the reader goes away.
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      ),
+    );
+
+    const res = await post({ question: "q" });
+    const messageId = Number(res.headers.get("x-conversation-message-id"));
+
+    const reader = res.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    // Cancellation is async; give the finalise a turn of the event loop to land.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const { rows } = await owner.query(
+      "SELECT content FROM app.conversation_message WHERE id = $1",
+      [messageId],
+    );
+    expect(rows[0].content.pending).toBeUndefined();
+    expect(rows[0].content.error).toBeTruthy();
+  });
+
+  it("records the answer exactly once when the stream completes normally", async () => {
+    mockFetch.mockResolvedValue(sseResponse(DONE_EVENT));
+    const res = await post({ question: "q" });
+    const messageId = Number(res.headers.get("x-conversation-message-id"));
+    await res.text();
+
+    const { rows } = await owner.query(
+      "SELECT content FROM app.conversation_message WHERE id = $1",
+      [messageId],
+    );
+    expect(rows[0].content).toMatchObject({ outcome: "answer", summary: "705 shots." });
+    expect(rows[0].content.error).toBeNull();
+  });
+
   it("appends to an existing conversation instead of creating another", async () => {
     mockFetch.mockResolvedValue(sseResponse(DONE_EVENT));
     const first = await post({ question: "first" });
@@ -379,6 +460,90 @@ describe("conversation persistence", () => {
     const sent = JSON.parse(mockFetch.mock.calls[0][1].body as string);
     expect(sent.conversation_message_id).toBe(messageId);
     expect(sent.conversation_id).toBe(res.headers.get("x-conversation-id"));
+  });
+});
+
+/**
+ * Phase 5: the bounded prior-turn window the route sends alongside the question
+ * (.agents/p5_conversational_context.md). The browser supplies a question and at most a
+ * conversation id — everything the model sees about the past is read here, from rows
+ * already scoped to the authenticated user.
+ */
+describe("conversation context", () => {
+  function sentContext(call = 0) {
+    return JSON.parse(mockFetch.mock.calls[call][1].body as string).context as {
+      turns: { role: string; text: string; sql?: string }[];
+    };
+  }
+
+  async function ask(question: string, conversationId?: number) {
+    mockFetch.mockResolvedValue(sseResponse(DONE_EVENT));
+    const res = await post(conversationId === undefined ? { question } : { question, conversationId });
+    const id = Number(res.headers.get("x-conversation-id"));
+    await res.text();
+    return id;
+  }
+
+  it("sends an empty context for the first question of a new thread", async () => {
+    await ask("How many threes were made?");
+    expect(sentContext()).toEqual({ turns: [] });
+  });
+
+  it("sends the previous exchange on a follow-up", async () => {
+    const conversationId = await ask("How many threes did Curry make?");
+    mockFetch.mockReset();
+    await ask("What about Lillard?", conversationId);
+
+    const context = sentContext();
+    expect(context.turns.map((t) => t.role)).toEqual(["user", "assistant"]);
+    expect(context.turns[0].text).toBe("How many threes did Curry make?");
+    expect(context.turns[1].text).toBe("705 shots.");
+    expect(context.turns[1].sql).toBe("SELECT 1");
+  });
+
+  it("never includes the question being asked right now", async () => {
+    const conversationId = await ask("first question");
+    mockFetch.mockReset();
+    await ask("the current question", conversationId);
+
+    expect(JSON.stringify(sentContext())).not.toContain("the current question");
+  });
+
+  it("never includes the empty assistant placeholder written for this turn", async () => {
+    const conversationId = await ask("first question");
+    mockFetch.mockReset();
+    await ask("second question", conversationId);
+
+    const context = sentContext();
+    expect(context.turns).toHaveLength(2);
+    expect(context.turns.every((t) => t.text !== "")).toBe(true);
+  });
+
+  it("carries no context from a thread the user does not own", async () => {
+    // The 404 already blocks the write; this asserts nothing was read either.
+    const { rows } = await owner.query(
+      "INSERT INTO app.conversation (user_id, title) VALUES ($1, 'theirs') RETURNING id",
+      [userB],
+    );
+    const theirs = Number(rows[0].id);
+    await owner.query(
+      `INSERT INTO app.conversation_message (conversation_id, role, content)
+       VALUES ($1, 'user', '{"text":"their secret question"}'::jsonb)`,
+      [theirs],
+    );
+
+    const res = await post({ question: "sneaky", conversationId: theirs });
+    expect(res.status).toBe(404);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the payload bounded over a long thread", async () => {
+    let conversationId = await ask("q0");
+    for (let i = 1; i < 8; i++) {
+      mockFetch.mockReset();
+      conversationId = await ask(`q${i}`, conversationId);
+    }
+    expect(sentContext().turns.length).toBeLessThanOrEqual(8);
   });
 });
 
@@ -443,6 +608,25 @@ describe("upstream non-2xx", () => {
 });
 
 describe("streaming", () => {
+  it("passes heartbeats through and still captures the answer behind them", async () => {
+    // agent/service.py emits `: keepalive` comments during long nodes so a slow turn
+    // is not indistinguishable from a dead one. They carry no `data:` line, so both
+    // readers of this stream must skip them rather than choke.
+    const payload =
+      ': keepalive\n\nevent: node\ndata: {"node":"classify"}\n\n: keepalive\n\n' + DONE_EVENT;
+    mockFetch.mockResolvedValue(sseResponse(payload));
+
+    const res = await post({ question: "q" });
+    const messageId = Number(res.headers.get("x-conversation-message-id"));
+    expect(await res.text()).toBe(payload);
+
+    const { rows } = await owner.query(
+      "SELECT content FROM app.conversation_message WHERE id = $1",
+      [messageId],
+    );
+    expect(rows[0].content).toMatchObject({ outcome: "answer", summary: "705 shots." });
+  });
+
   it("streams the upstream SSE body through unmodified with the right content-type", async () => {
     const payload = `event: node\ndata: {"node":"classify"}\n\n${DONE_EVENT}`;
     mockFetch.mockResolvedValue(sseResponse(payload));

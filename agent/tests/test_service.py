@@ -115,3 +115,64 @@ def test_agent_endpoint_clarify_short_circuit_streams_only_classify_and_done():
     assert done_data["summary"] == "Which season?"
     assert done_data["sql"] is None
     assert executor.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Heartbeats (.agents/p5_regression_report.md, 2026-08-10)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_a_quiet_source_produces_keepalives(monkeypatch):
+    """A node emits nothing until it finishes; draft_sql has been measured at 25s.
+    Without a heartbeat that window is silent on the wire."""
+    import asyncio
+
+    from agent import service
+    from agent.service import _HEARTBEAT, _with_heartbeats
+
+    monkeypatch.setattr(service, "HEARTBEAT_SECONDS", 0.01)
+
+    async def slow():
+        await asyncio.sleep(0.05)
+        yield "event: done\ndata: {}\n\n"
+
+    chunks = [chunk async for chunk in _with_heartbeats(slow())]
+
+    assert _HEARTBEAT in chunks
+    assert chunks[-1] == "event: done\ndata: {}\n\n"
+
+
+@pytest.mark.anyio
+async def test_a_fast_source_is_passed_through_untouched():
+    from agent.service import _HEARTBEAT, _with_heartbeats
+
+    async def fast():
+        yield "event: node\ndata: {}\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    chunks = [chunk async for chunk in _with_heartbeats(fast())]
+    assert chunks == ["event: node\ndata: {}\n\n", "event: done\ndata: {}\n\n"]
+    assert _HEARTBEAT not in chunks
+
+
+@pytest.mark.anyio
+async def test_an_error_in_the_source_still_surfaces():
+    from agent.service import _with_heartbeats
+
+    async def boom():
+        yield "event: node\ndata: {}\n\n"
+        raise RuntimeError("graph exploded")
+
+    with pytest.raises(RuntimeError, match="graph exploded"):
+        [chunk async for chunk in _with_heartbeats(boom())]
+
+
+def test_a_heartbeat_is_ignored_by_the_sse_readers():
+    """Both consumers of this stream skip a block with no `data:` line —
+    web/lib/agent-client.ts's parseSseBlock and the proxy's consume()."""
+    from agent.service import _HEARTBEAT
+
+    block = _HEARTBEAT.split("\n\n")[0]
+    assert not any(line.startswith("data:") for line in block.split("\n"))
+    assert not any(line.startswith("event:") for line in block.split("\n"))

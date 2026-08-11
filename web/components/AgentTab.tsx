@@ -185,6 +185,7 @@ export default function AgentTab({ schema, onOpenInEditor }: Props) {
         },
       ]);
 
+      let answered = false;
       try {
         for await (const event of streamAgentAnswer({ question, conversationId: activeId })) {
           if (!mountedRef.current) return;
@@ -201,12 +202,26 @@ export default function AgentTab({ schema, onOpenInEditor }: Props) {
               return { ...t, nodeProgress };
             });
           } else {
+            answered = true;
             updateAssistantTurn(assistantId, (t) => ({
               ...t,
               status: "done",
               envelope: event.envelope,
             }));
           }
+        }
+
+        // The stream ended cleanly but never delivered a `done` event — the route hit its
+        // 60s ceiling, or the service died mid-turn. Without this the turn sits on
+        // `status: "streaming"` forever, showing a node checklist and no answer, which is
+        // the second half of the 2026-08-10 report's symptom. The server has already
+        // recorded the turn as interrupted; say the same thing here and offer the retry.
+        if (!answered && mountedRef.current) {
+          updateAssistantTurn(assistantId, (t) => ({
+            ...t,
+            status: "error",
+            error: "the agent stopped before finishing this answer — it may have taken too long",
+          }));
         }
       } catch (err) {
         if (!mountedRef.current) return;

@@ -7,6 +7,7 @@ import {
   appendUserMessage,
   createConversation,
   finalizeAssistantMessage,
+  readConversationContext,
   readConversationId,
   titleFrom,
   touchConversation,
@@ -54,14 +55,34 @@ function interruptedEnvelope(reason: string): AgentEnvelope {
  * Passes the upstream SSE bytes through untouched while reading the terminal `done` event out
  * of them, so the assistant turn can be persisted without buffering the response.
  *
- * The write happens in `flush`, which runs before the response stream closes — i.e. still
- * inside the request's lifetime, which a fire-and-forget promise after `return` would not be
- * on a serverless platform.
+ * This is a hand-pumped ReadableStream rather than `pipeThrough(new TransformStream(...))`,
+ * and the reason is the bug it exists to fix (.agents/p5_regression_report.md, 2026-08-10).
+ * A transformer's `flush()` runs on normal completion and on NOTHING else — verified against
+ * the Streams implementation directly:
+ *
+ *     normal completion                    flush() RAN
+ *     upstream error (aborted fetch)       flush() did NOT run
+ *     consumer cancel (client disconnect)  flush() did NOT run
+ *
+ * So every abnormal ending — the route hitting `maxDuration`, the client navigating away, the
+ * service crashing — skipped the only call to `finalizeAssistantMessage` and left the row
+ * `{pending: true}` permanently. The `interruptedEnvelope` fallback written for exactly that
+ * case was unreachable. Pumping by hand means finalisation hangs off `finally` and `cancel()`,
+ * which every path reaches, and `finalized` makes it idempotent so the two cannot both fire.
+ *
+ * The write still happens inside the request's lifetime, which a fire-and-forget promise after
+ * `return` would not be on a serverless platform.
  */
-function captureEnvelope(messageId: number, startedAt: number): TransformStream<Uint8Array, Uint8Array> {
+function captureEnvelope(
+  upstream: ReadableStream<Uint8Array>,
+  messageId: number,
+  startedAt: number,
+): ReadableStream<Uint8Array> {
+  const reader = upstream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let envelope: AgentEnvelope | null = null;
+  let finalized = false;
 
   const consume = (block: string) => {
     let event = "message";
@@ -80,22 +101,47 @@ function captureEnvelope(messageId: number, startedAt: number): TransformStream<
     }
   };
 
-  return new TransformStream({
-    transform(chunk, controller) {
-      controller.enqueue(chunk);
-      buffer += decoder.decode(chunk, { stream: true });
-      let boundary: number;
-      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-        consume(buffer.slice(0, boundary));
-        buffer = buffer.slice(boundary + 2);
+  const finalize = async (reason: string) => {
+    if (finalized) return;
+    finalized = true;
+    try {
+      await finalizeAssistantMessage(messageId, envelope ?? interruptedEnvelope(reason));
+    } catch {
+      // The response is already on its way to the user; a failed bookkeeping write must not
+      // turn a delivered answer into an error. The row stays pending and reads as interrupted.
+    }
+  };
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          if (buffer.trim() !== "") consume(buffer);
+          await finalize("the agent service closed the stream without an answer");
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+        buffer += decoder.decode(value, { stream: true });
+        let boundary: number;
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+          consume(buffer.slice(0, boundary));
+          buffer = buffer.slice(boundary + 2);
+        }
+      } catch (err) {
+        await finalize(
+          `the agent stream failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        controller.error(err);
       }
     },
-    async flush() {
-      if (buffer.trim() !== "") consume(buffer);
-      await finalizeAssistantMessage(
-        messageId,
-        envelope ?? interruptedEnvelope("the agent service closed the stream without an answer"),
-      );
+    async cancel(reason) {
+      // The client went away, or the platform tore the request down at `maxDuration`. Whatever
+      // the agent had produced by now is what the turn gets; without this it would keep the
+      // placeholder forever and render as an answer with no content.
+      await finalize("this answer was interrupted before the agent finished");
+      await reader.cancel(reason).catch(() => {});
     },
   });
 }
@@ -178,6 +224,16 @@ export async function POST(req: Request) {
   const conversationId =
     requested ?? (await createConversation(session.userId, titleFrom(question))).id;
 
+  // Read BEFORE appending (.agents/p5_conversational_context.md "Context ownership"):
+  // the two rows written below are this turn's question and an empty placeholder, and
+  // neither is history. Reading first is what keeps them out by construction rather
+  // than by an id filter that has to stay correct.
+  //
+  // The browser never supplies history — it sends a question and at most a conversation
+  // id, and the context comes from rows already verified to belong to `session.userId`.
+  // A client that could hand us its own transcript could put anything in the prompt.
+  const context = requested === null ? { turns: [] } : await readConversationContext(session.userId, conversationId);
+
   const userMessageId = await appendUserMessage(session.userId, conversationId, question);
   if (userMessageId === null) {
     return Response.json({ error: "conversation not found" }, { status: 404 });
@@ -208,6 +264,10 @@ export async function POST(req: Request) {
         // this field and agent/execute.py does NOT forward it, so the column still lands NULL —
         // agent/ is out of scope for this branch. See the report.
         conversation_message_id: assistantMessageId,
+        // The bounded prior-turn window (web/lib/conversation-context.ts). The service
+        // re-clamps it on arrival (agent/context.py) — this side is the authority for
+        // *what* is in it, not the only thing enforcing *how much*.
+        context,
       }),
       signal: req.signal,
     });
@@ -225,7 +285,7 @@ export async function POST(req: Request) {
     return Response.json({ error: message }, { status });
   }
 
-  return new Response(upstream.body.pipeThrough(captureEnvelope(assistantMessageId, startedAt)), {
+  return new Response(captureEnvelope(upstream.body, assistantMessageId, startedAt), {
     status: 200,
     headers: {
       "content-type": "text/event-stream",

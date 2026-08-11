@@ -148,10 +148,13 @@ An Agent tab on `/sandbox` where users ask questions in natural language and an 
 
 Architecture: a Python FastAPI + LangGraph service (`agent/`) holds the agent loop only; Next.js keeps the web app and gains `/api/agent` as a thin authenticating proxy. The service never holds a database DSN — SQL reaches Postgres solely through `/api/internal/query`, a second, service-token-gated door onto the same validator → `sandbox_ro` → timeout/row-cap → `query_log` chain. `query_log.source` (`editor` | `agent` | `eval`) records provenance and is set by the endpoint, never by the caller.
 
-Ships alongside an eval harness (`evals/`) measuring execution accuracy and, deliberately weighted, abstention — knowing when the data *cannot* answer a question. Table results only; charts are Phase 5.
+Ships alongside an eval harness (`evals/`) measuring execution accuracy and, deliberately weighted, abstention — knowing when the data *cannot* answer a question. Table results only; charts are Phase 6+.
 
-**Phase 5+ — Remaining post-MVP / stretch**
-Visualization suite (bar/line/scatter behind the Phase 2 result-view seam) and a basketball-court shot chart from `shot_detail`'s `loc_x`/`loc_y`; full historical backfill; precomputed aggregate tables; derived player/team lookup tables; ISR static season pages; additional sources (`matchups`, `pbpstats`) if event-level analysis demands it; broader user growth.
+**Phase 5 — Conversational context + multi-turn evals**
+Make the Agent tab genuinely conversational: bounded, user-scoped prior turns feed the existing LangGraph; follow-up questions can transform the preceding analysis; and a response to an agent clarification resumes the original request. Add a separate execution-scored multi-turn eval suite while keeping the Phase 4 graph topology and SQL execution boundary unchanged. Detailed plan: `.agents/p5_conversational_context.md`.
+
+**Phase 6+ — Remaining post-MVP / stretch**
+Visualization suite (bar/line/scatter behind the Phase 2 result-view seam) and a basketball-court shot chart from `shot_detail`'s `loc_x`/`loc_y`; additional valid-but-wrong eval cases; full historical backfill; precomputed aggregate tables; derived player/team lookup tables; ISR static season pages; additional sources (`matchups`, `pbpstats`) if event-level analysis demands it; broader user growth.
 
 ## 12. MVP Success Criteria
 

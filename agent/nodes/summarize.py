@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from ..context import node_messages, task_question
 from ..execute import ExecResult
 from ..llm import ModelClient
 from ..state import AgentState
@@ -68,13 +69,13 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
             return {"outcome": "answer", "error": unresolved_error}
 
         content = (
-            f"Question: {state['question']}\n\n"
+            f"Question: {task_question(state)}\n\n"
             f"SQL:\n{state.get('sql')}\n\n"
             f"Result: {_result_for_prompt(state.get('result'))}"
         )
         reply = model_client.complete(
             "summarize",
-            messages=[{"role": "user", "content": content}],
+            messages=node_messages(state, "summarize", content),
             schema=RESPONSE_SCHEMA,
         )
         return {

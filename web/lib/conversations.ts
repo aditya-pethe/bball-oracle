@@ -1,4 +1,9 @@
 import type { AgentEnvelope, AgentMessage, Conversation, QueryResult } from "./api-types";
+import {
+  MAX_CONTEXT_MESSAGES,
+  buildConversationContext,
+  type ConversationContext,
+} from "./conversation-context";
 import { getAppPool } from "./execute-query";
 
 /**
@@ -155,6 +160,56 @@ export async function getConversation(
     [id],
   );
   return { conversation: toConversation(rows[0]), messages: messages.rows.map(toMessage) };
+}
+
+/**
+ * How many rows the context read pulls before `buildConversationContext` clamps them.
+ * Wider than MAX_CONTEXT_MESSAGES on purpose: an unresolved clarification is pinned
+ * into the window even when it falls outside the recent-message rule, which is only
+ * possible if the older exchange was fetched in the first place. Still a fixed bound —
+ * the query never scans a whole thread.
+ */
+const CONTEXT_READ_LIMIT = MAX_CONTEXT_MESSAGES * 4;
+
+/**
+ * The bounded conversation context sent to the agent service
+ * (.agents/p5_conversational_context.md). Ownership is enforced in the SQL join, same
+ * pattern as every other function here — never "fetch, then check the owner in JS".
+ *
+ * Two classes of row are excluded, and both matter:
+ *
+ *   - assistant placeholders (`content->>'pending'`), because the turn now in flight
+ *     has no answer yet and presenting one as history is a lie about what was said;
+ *   - anything at or after `beforeMessageId`, which is how the caller keeps the
+ *     question it just persisted from arriving back as its own context.
+ *
+ * `/api/agent` reads before it appends, so `beforeMessageId` is belt-and-braces there —
+ * but it is what makes this function safe to call in either order, and the route test
+ * asserts the current question never appears in the payload.
+ *
+ * The placeholder filter is `IS DISTINCT FROM 'true'`, not `NOT (... = 'true')`: a
+ * finalised envelope has no `pending` key at all, so that equality is NULL and NOT NULL
+ * is NULL — which drops every completed assistant turn instead of every placeholder,
+ * leaving a context of nothing but the user's own questions.
+ */
+export async function readConversationContext(
+  userId: number,
+  conversationId: number,
+  options: { beforeMessageId?: number | null } = {},
+): Promise<ConversationContext> {
+  const { rows } = await getAppPool().query<MessageRow>(
+    `SELECT m.id, m.role, m.content, m.created_at
+       FROM app.conversation_message m
+       JOIN app.conversation c ON c.id = m.conversation_id
+      WHERE m.conversation_id = $1
+        AND c.user_id = $2
+        AND m.content->>'pending' IS DISTINCT FROM 'true'
+        AND ($3::bigint IS NULL OR m.id < $3::bigint)
+      ORDER BY m.id DESC
+      LIMIT $4`,
+    [conversationId, userId, options.beforeMessageId ?? null, CONTEXT_READ_LIMIT],
+  );
+  return buildConversationContext(rows.reverse().map(toMessage));
 }
 
 export async function deleteConversation(userId: number, id: number): Promise<boolean> {

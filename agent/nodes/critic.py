@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from ..context import node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
 
@@ -76,13 +77,13 @@ def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
         content = (
             "Task: compare this question against the SQL and result below. "
             "Reject only if you can name a concrete mismatch; otherwise ok.\n\n"
-            f"Question: {state['question']}\n\n"
+            f"Question: {task_question(state)}\n\n"
             f"SQL:\n{state.get('sql')}\n\n"
             f"Result: {_result_summary(state)}"
         )
         reply = model_client.complete(
             "critic",
-            messages=[{"role": "user", "content": content}],
+            messages=node_messages(state, "critic", content),
             schema=RESPONSE_SCHEMA,
         )
         verdict = reply.payload.get("verdict", "ok")

@@ -74,11 +74,22 @@ class RetryLimits:
     There is no `validate` limit: rungs 1-3 (SQL error, validator rejection,
     degenerate result) all surface from the single execute node and share its
     budget. See the module docstring for why validation is not its own node.
+
+    `retry_deadline_ms` is the budget the call counts could not express
+    (.agents/p5_regression_report.md, 2026-08-10). /api/agent is capped at
+    `maxDuration = 60`, and a turn that breaches it is not "slow" -- the platform
+    tears the stream down mid-node and the user gets no answer at all. A ladder
+    can be comfortably inside its call budget and still start a rung it cannot
+    finish: a redraft costs a model call of 10-25s, plus an execute, plus a
+    critic, plus the summarize that has to follow. 25s is the point past which
+    another rung plus a summarize no longer reliably fits in 60. Deliberately
+    conservative: a merely-good answer delivered beats a better one discarded.
     """
 
     execute: int = 2
     critic: int = 2
     total_model_calls: int = 6
+    retry_deadline_ms: int = 25_000
 
 
 def _timed(name: str, fn: Callable[[AgentState], dict]) -> Callable[[AgentState], dict]:
@@ -130,6 +141,18 @@ def build_graph(
     def _budget_exhausted(state: AgentState) -> bool:
         return state.get("total_model_calls", 0) >= limits.total_model_calls
 
+    def _out_of_time(state: AgentState) -> bool:
+        """Whether another correction rung can still finish inside the route's window.
+
+        A missing `started_at` means no clock, not "out of time": failing closed
+        here would silently disable the correction ladder for any caller that
+        hand-builds a state, which is a worse bug than the one being fixed.
+        """
+        started = state.get("started_at")
+        if started is None:
+            return False
+        return (time.monotonic() - started) * 1000 >= limits.retry_deadline_ms
+
     def after_execute(state: AgentState) -> str:
         # Fatal first: a caller error (unknown user, malformed request) is not a
         # rung on the ladder, and retrying it burns model calls on a problem the
@@ -144,7 +167,11 @@ def build_graph(
         # SELECT" are different instructions to the drafter.
         if state.get("execute_error") is None and state.get("validation_error") is None:
             return "critic"
-        if _budget_exhausted(state) or state.get("execute_retry_count", 0) >= limits.execute:
+        if (
+            _budget_exhausted(state)
+            or _out_of_time(state)
+            or state.get("execute_retry_count", 0) >= limits.execute
+        ):
             return "summarize"
         return "draft_sql"
 
@@ -153,7 +180,11 @@ def build_graph(
     def after_critic(state: AgentState) -> str:
         if state.get("critic_verdict") != "reject":
             return "summarize"
-        if _budget_exhausted(state) or state.get("critic_retry_count", 0) >= limits.critic:
+        if (
+            _budget_exhausted(state)
+            or _out_of_time(state)
+            or state.get("critic_retry_count", 0) >= limits.critic
+        ):
             return "summarize"
         return "draft_sql"
 

@@ -16,8 +16,10 @@ thing that writes this key.
 from __future__ import annotations
 
 import operator
+import time
 from typing import Annotated, Literal, TypedDict
 
+from .context import ConversationContext, resolve_question
 from .envelope import ExecResult, NodeTiming
 
 Outcome = Literal["answer", "clarify", "decline"]
@@ -29,6 +31,28 @@ class AgentState(TypedDict, total=False):
     user_id: int
     conversation_id: str | None
     conversation_message_id: int | None
+
+    # Phase 5 (.agents/p5_conversational_context.md). Both seeded once per request
+    # and never written by a node -- they describe the request, not its progress.
+    #
+    # `conversation_context` is the bounded prior-turn window Next.js read from
+    # `app.conversation_message`; agent/context.py renders a node-appropriate view of
+    # it. `resolved_question` is the task the graph actually works on: identical to
+    # `question` most of the time, and the original question + the agent's
+    # clarification + the user's answer folded together when a clarification was
+    # pending. `question` is kept as asked so the audit trail records what the user
+    # typed, not what the graph made of it.
+    conversation_context: ConversationContext | None
+    resolved_question: str | None
+
+    # Monotonic clock reading from when this turn started, used by agent/graph.py to
+    # refuse a correction rung it cannot finish in time. RetryLimits bounds model
+    # CALLS; the thing that actually kills a turn in production is TIME -- /api/agent
+    # is capped at 60s and tears the stream down mid-node with no answer at all
+    # (.agents/p5_regression_report.md, 2026-08-10). None means "no clock", which
+    # disables the deadline rather than failing closed: a hand-built state should
+    # lose the ladder to a missing field.
+    started_at: float | None
 
     # classify's verdict. Left unset (falls through to draft_sql) when the
     # question is answerable; set to "clarify"/"decline" to short-circuit
@@ -77,17 +101,25 @@ def new_state(
     conversation_id: str | None = None,
     *,
     conversation_message_id: int | None = None,
+    conversation_context: ConversationContext | None = None,
 ) -> AgentState:
     """The initial state every graph run must start from.
 
     The `Annotated[..., operator.add]` fields need a seed value -- the first
     node to write one is adding to it, not setting it from nothing.
+
+    Clarification continuation is resolved HERE, once, rather than inside each
+    node: four nodes independently deciding whether a clarification is pending is
+    four chances for them to disagree about what this turn is even asking.
     """
     return AgentState(
         question=question,
         user_id=user_id,
         conversation_id=conversation_id,
         conversation_message_id=conversation_message_id,
+        conversation_context=conversation_context,
+        resolved_question=resolve_question(question, conversation_context),
+        started_at=time.monotonic(),
         outcome=None,
         clarify_question=None,
         decline_reason=None,

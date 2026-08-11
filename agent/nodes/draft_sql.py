@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from ..context import TRANSFORM_GUIDANCE, context_of, node_messages, task_question
 from ..llm import ModelClient
 from ..state import AgentState
 
@@ -94,14 +95,24 @@ def _retry_instruction(state: AgentState) -> str | None:
 
 def build(model_client: ModelClient) -> Callable[[AgentState], dict]:
     def draft_sql(state: AgentState) -> dict:
-        content = f"Question: {state['question']}"
+        parts = [f"Question: {task_question(state)}"]
+
+        # Only when there is a previous SUCCESSFUL query above to transform --
+        # `last_reusable_turn` skips failed and abstained turns, so this never
+        # points the drafter at a query that did not work.
+        context = context_of(state)
+        if context is not None and context.last_reusable_turn is not None:
+            parts.append(TRANSFORM_GUIDANCE)
+
+        # Last, so a correction dominates: a retry's job is to fix the specific
+        # failure, not to weigh it against conversational guidance.
         retry_note = _retry_instruction(state)
         if retry_note:
-            content = f"{content}\n\n{retry_note}"
+            parts.append(retry_note)
 
         reply = model_client.complete(
             "draft_sql",
-            messages=[{"role": "user", "content": content}],
+            messages=node_messages(state, "draft_sql", "\n\n".join(parts)),
             schema=RESPONSE_SCHEMA,
         )
         sql = reply.payload.get("sql")

@@ -178,3 +178,54 @@ describe("AgentMessageBubble — streaming and error states", () => {
     expect(onRetry).toHaveBeenCalledWith("Who led the league in points?");
   });
 });
+
+/**
+ * A stored turn whose envelope carries an error but no result. Produced by an
+ * interrupted stream (conversations.ts's INTERRUPTED) and by summarize's
+ * retries-exhausted path, which returns `{outcome: "answer", error}` and no summary.
+ *
+ * Before this was rendered, such a turn showed an outcome badge and nothing else —
+ * the whole visible symptom of the 2026-08-10 report: a slow question answered with
+ * a blank bubble while the explanation sat unread in the database.
+ */
+describe("an envelope carrying an error", () => {
+  it("shows the error when there is no result to carry it", () => {
+    render(
+      <AgentMessageBubble
+        turn={doneTurn({
+          envelope: {
+            outcome: "answer",
+            summary: "",
+            sql: null,
+            result: null,
+            error: "this answer was interrupted before the agent finished",
+          },
+        })}
+        question="Who scored the most points this season"
+        onOpenInEditor={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("this answer was interrupted before the agent finished")).toBeTruthy();
+  });
+
+  it("does not report the same failure twice when a result already carries it", () => {
+    render(
+      <AgentMessageBubble
+        turn={doneTurn({
+          envelope: {
+            outcome: "answer",
+            summary: "",
+            sql: "SELECT bad",
+            result: { status: "error", error: "column does not exist", durationMs: 12 },
+            error: "column does not exist",
+          },
+        })}
+        question="q"
+        onOpenInEditor={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText(/column does not exist/)).toHaveLength(1);
+  });
+});

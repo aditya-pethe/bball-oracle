@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import time
 
+from agent.context import ConversationContext, append_assistant_turn, append_user_turn
 from agent.execute import InternalQueryExecutor
 from agent.graph import RetryLimits, build_graph
 from agent.llm import AnthropicModelClient, ModelClient
@@ -76,8 +77,13 @@ class GraphAgent:
         return f"graph-{self._model}"
 
     def answer(self, question: str) -> AgentEnvelope:
+        return self._invoke(question, None)
+
+    def _invoke(
+        self, question: str, context: ConversationContext | None
+    ) -> AgentEnvelope:
         started = time.monotonic()
-        state = dict(new_state(question, self._user_id))
+        state = dict(new_state(question, self._user_id, conversation_context=context))
 
         try:
             final = self._graph.invoke(state)
@@ -97,6 +103,52 @@ class GraphAgent:
             )
 
         return _envelope_from_state(final, model=self._model, total_ms=(time.monotonic() - started) * 1000)
+
+
+class _GraphConversation:
+    """One thread against the graph.
+
+    Context is rebuilt with `agent.context`'s own builders after every turn — the
+    same projection `web/lib/conversation-context.ts` performs against a persisted
+    row, and the same bounds. That is the point: if this file built its own context
+    the eval would be measuring a prompt production never sends
+    (.agents/p5_conversational_context.md: "do not create an eval-only prompt path").
+
+    What it does NOT reproduce is persistence and ownership. Production reads the
+    window back out of `app.conversation_message` under a verified
+    `(user_id, conversation_id)` scope; here the window is held in memory for the
+    length of one conversation. That difference is deliberate — the eval measures
+    whether context makes the agent answer correctly, and the route tests
+    (web/lib/conversation-context-read.test.ts) measure whether the right context
+    was read in the first place.
+    """
+
+    def __init__(self, agent: "ConversationGraphAgent") -> None:
+        self._agent = agent
+        self._context: ConversationContext | None = None
+
+    def ask(self, question: str) -> AgentEnvelope:
+        envelope = self._agent._invoke(question, self._context)
+        self._context = append_assistant_turn(
+            append_user_turn(self._context, question), envelope
+        )
+        return envelope
+
+
+class ConversationGraphAgent(GraphAgent):
+    """GraphAgent behind the multi-turn `ConversationAgent` protocol.
+
+    Subclasses rather than wraps so the model, executor, retry limits and user
+    attribution are configured exactly once, and a change to any of them cannot
+    apply to one suite and not the other.
+    """
+
+    @property
+    def name(self) -> str:
+        return f"graph-conv-{self._model}"
+
+    def new_conversation(self) -> _GraphConversation:
+        return _GraphConversation(self)
 
 
 def _tool_calls(final: dict) -> int:

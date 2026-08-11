@@ -23,6 +23,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
+from .context import ConversationContext
 from .execute import ExecResult, InternalQueryExecutor
 from .graph import build_graph
 from .llm import AnthropicModelClient, ModelClient
@@ -40,6 +41,15 @@ class AgentRequest(BaseModel):
     # that caused them -- without it the audit trail has SQL but no question,
     # which is most of the signal when reviewing what the agent wrote.
     conversation_message_id: int | None = None
+    # The bounded prior-turn window (.agents/p5_conversational_context.md). Read by
+    # the Next.js proxy from `app.conversation_message` under a verified
+    # `(user_id, conversation_id)` scope -- this service never fetches a conversation
+    # and still holds no database credential. Optional so a single-turn caller (and
+    # every existing Phase 4 client) needs no change.
+    #
+    # Not trusted as sent: ConversationContext re-applies its own bounds on
+    # validation, so an oversized or malformed window is clamped here too.
+    context: ConversationContext | None = None
 
 
 @app.get("/health")
@@ -158,6 +168,56 @@ def _envelope(state: dict) -> dict:
     }
 
 
+# A node event is only emitted once its node FINISHES, and draft_sql has been
+# measured at 25s in production. For that whole window the connection carries no
+# bytes, which makes a slow turn indistinguishable from a dead one -- to any
+# buffering proxy between here and the browser, and to the user
+# (.agents/p5_regression_report.md, 2026-08-10). An SSE comment costs nothing and
+# is ignored by both readers of this stream: web/lib/agent-client.ts's
+# parseSseBlock and the proxy's own consume() both require a `data:` line and skip
+# a block without one.
+# 5s, not 10: measured node durations are 2-25s, and at 10s a typical turn emits
+# no heartbeat at all, which defeats the point. At 5s any node slower than that --
+# which is most draft_sql calls -- produces a steady liveness signal. The cost is
+# a 13-byte comment line.
+HEARTBEAT_SECONDS = 5.0
+_HEARTBEAT = ": keepalive\n\n"
+
+
+async def _with_heartbeats(source: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Yields everything `source` produces, plus a keepalive whenever it goes
+    quiet for longer than HEARTBEAT_SECONDS."""
+    import asyncio
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    _DONE = object()
+
+    async def pump() -> None:
+        try:
+            async for item in source:
+                await queue.put(item)
+        except Exception as err:  # noqa: BLE001 - re-raised on the consumer side
+            await queue.put(err)
+        else:
+            await queue.put(_DONE)
+
+    task = asyncio.create_task(pump())
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
+            except asyncio.TimeoutError:
+                yield _HEARTBEAT
+                continue
+            if item is _DONE:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        task.cancel()
+
+
 async def _stream_agent(
     req: AgentRequest, model_client: ModelClient, executor: InternalQueryExecutor
 ) -> AsyncIterator[str]:
@@ -168,6 +228,7 @@ async def _stream_agent(
             req.user_id,
             req.conversation_id,
             conversation_message_id=req.conversation_message_id,
+            conversation_context=req.context,
         )
     )
 
@@ -201,5 +262,6 @@ async def agent_endpoint(
     executor: InternalQueryExecutor = Depends(get_executor),
 ) -> StreamingResponse:
     return StreamingResponse(
-        _stream_agent(req, model_client, executor), media_type="text/event-stream"
+        _with_heartbeats(_stream_agent(req, model_client, executor)),
+        media_type="text/event-stream",
     )

@@ -216,3 +216,112 @@ def test_retry_is_bounded_and_terminates_with_an_error():
     # call to narrate an empty result.
     assert "summarize" not in model.calls
     assert final["total_model_calls"] <= limits.total_model_calls
+
+
+# ---------------------------------------------------------------------------
+# Wall-clock budget (.agents/p5_regression_report.md, 2026-08-10)
+# ---------------------------------------------------------------------------
+#
+# RetryLimits bounds MODEL CALLS, but the thing that actually killed a turn in
+# production was TIME: /api/agent's `maxDuration = 60`. A ladder that is well
+# inside its call budget can still start a rung it cannot finish, and the route
+# is torn down mid-node with no answer at all. Six model calls at 10-25s each
+# was never going to fit, and nothing in the graph knew that.
+
+
+def _slow_scripts() -> dict[str, list[dict]]:
+    return {
+        "classify": [{"verdict": "answerable", "clarify_question": None, "decline_reason": None}],
+        "draft_sql": [{"sql": "SELECT 1"}],
+        "critic": [{"verdict": "reject", "feedback": "wrong table"}],
+        "summarize": [{"summary": "Best effort."}],
+    }
+
+
+def test_a_retry_is_not_started_when_the_wall_clock_budget_is_spent():
+    model = FakeModelClient(scripts=_slow_scripts())
+    executor = FakeExecutor(
+        outcomes=[ExecOutcome(status="ok", result=ExecResult(columns=("n",), rows=((1,),)))]
+    )
+    graph = build_graph(model, executor, limits=RetryLimits(retry_deadline_ms=0))
+
+    state = dict(new_state(QUESTION, user_id=1))
+    final = graph.invoke(state)
+
+    # The critic rejected and the call budget was untouched, so without a clock
+    # this would have gone back to draft_sql. It went to summarize instead.
+    assert model.calls == ["classify", "draft_sql", "critic", "summarize"]
+    assert final["outcome"] == "answer"
+    assert final["critic_retry_count"] == 1
+
+
+def test_a_retry_still_happens_inside_the_budget():
+    model = FakeModelClient(
+        scripts={
+            "classify": [{"verdict": "answerable", "clarify_question": None, "decline_reason": None}],
+            "draft_sql": [{"sql": "SELECT 1"}, {"sql": "SELECT 2"}],
+            "critic": [{"verdict": "reject", "feedback": "wrong table"}, {"verdict": "ok", "feedback": ""}],
+            "summarize": [{"summary": "Fixed."}],
+        }
+    )
+    executor = FakeExecutor(
+        outcomes=[
+            ExecOutcome(status="ok", result=ExecResult(columns=("n",), rows=((1,),))),
+            ExecOutcome(status="ok", result=ExecResult(columns=("n",), rows=((2,),))),
+        ]
+    )
+    graph = build_graph(model, executor, limits=RetryLimits(retry_deadline_ms=60_000))
+
+    final = graph.invoke(dict(new_state(QUESTION, user_id=1)))
+
+    assert model.calls == ["classify", "draft_sql", "critic", "draft_sql", "critic", "summarize"]
+    assert final["sql"] == "SELECT 2"
+
+
+def test_an_execute_retry_also_respects_the_clock():
+    model = FakeModelClient(
+        scripts={
+            "classify": [{"verdict": "answerable", "clarify_question": None, "decline_reason": None}],
+            "draft_sql": [{"sql": "SELECT bad"}],
+            "summarize": [{"summary": "Could not run it."}],
+        }
+    )
+    executor = FakeExecutor(outcomes=[ExecOutcome(status="timeout", error="statement timeout")])
+    graph = build_graph(model, executor, limits=RetryLimits(retry_deadline_ms=0))
+
+    final = graph.invoke(dict(new_state(QUESTION, user_id=1)))
+
+    # One draft, one timed-out execute, then straight out -- no second draft.
+    # `summarize` is absent from model.calls on purpose: its retries-exhausted path
+    # reports the failure without spending a model call to narrate an empty result.
+    assert model.calls == ["classify", "draft_sql"]
+    assert executor.calls == ["SELECT bad"]
+    assert final["error"] == "statement timeout"
+    assert "summarize" in {t.node for t in final["node_timings"]}
+
+
+def test_a_state_without_a_start_time_is_never_deadline_limited():
+    # Callers that hand-build a state dict (older tests, ad-hoc invocations) have
+    # no `started_at`. Treating a missing clock as "out of time" would silently
+    # disable the correction ladder for them.
+    model = FakeModelClient(
+        scripts={
+            "classify": [{"verdict": "answerable", "clarify_question": None, "decline_reason": None}],
+            "draft_sql": [{"sql": "SELECT 1"}, {"sql": "SELECT 2"}],
+            "critic": [{"verdict": "reject", "feedback": "no"}, {"verdict": "ok", "feedback": ""}],
+            "summarize": [{"summary": "ok"}],
+        }
+    )
+    executor = FakeExecutor(
+        outcomes=[
+            ExecOutcome(status="ok", result=ExecResult(columns=("n",), rows=((1,),))),
+            ExecOutcome(status="ok", result=ExecResult(columns=("n",), rows=((2,),))),
+        ]
+    )
+    graph = build_graph(model, executor, limits=RetryLimits(retry_deadline_ms=0))
+
+    state = dict(new_state(QUESTION, user_id=1))
+    state["started_at"] = None
+
+    final = graph.invoke(state)
+    assert final["sql"] == "SELECT 2"

@@ -71,6 +71,19 @@ export default function AgentMessageBubble({ turn, question, onOpenInEditor, onR
             <p className="whitespace-pre-wrap text-sm text-ink">{envelope.summary}</p>
           )}
 
+          {/* A stored turn can carry an error with no result to hang it on — an interrupted
+              stream, or a correction ladder that exhausted its budget. Before this, such a turn
+              rendered as an outcome badge and nothing else: the explanation was persisted and
+              then never shown, which is how a timeout came to look like the agent answering
+              with silence. `result` is the other renderer for the same field (agent-client.ts's
+              toQueryResult folds a wire error into a QueryResult), so this only fires when that
+              one cannot — hence the guard, which keeps SQL errors from being reported twice. */}
+          {envelope.error && !envelope.result && (
+            <p className="rounded-panel border border-danger/40 bg-danger/5 px-2 py-1 text-xs text-danger">
+              {envelope.error}
+            </p>
+          )}
+
           {/* Design principle 1 (.agents/p4_agent.md): every answer discloses the SQL that
               produced it, collapsed by default but always present, one click from the editor —
               never hidden, never gated behind a hover. */}
