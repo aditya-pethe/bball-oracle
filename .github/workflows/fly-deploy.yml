@@ -1,0 +1,56 @@
+# Deploys the Python agent service to Fly on every push to main that touches it.
+#
+# Vercel is NOT here: its Git integration lives in the Vercel dashboard, not in the
+# repo, and it deploys the Next app on push by itself. This workflow covers the other
+# half of the loop, which nothing was deploying — the cause of the 2026-08-10 version
+# skew, where Vercel shipped a request field the Fly service had never heard of and
+# silently dropped (Pydantic ignores unknown fields), so every follow-up question was
+# answered as if it were the first.
+name: Deploy agent service
+
+on:
+  push:
+    branches: [main]
+    # Only what actually goes into the image. A web-only commit rebuilding and
+    # redeploying the Python service would be pure latency for no change.
+    paths:
+      - "agent/**"
+      - "fly.toml"
+      - ".github/workflows/fly-deploy.yml"
+  workflow_dispatch: {}
+
+# Deploys are serialised. `cancel-in-progress: false` on purpose: killing flyctl
+# partway through a release is a worse outcome than waiting for it to finish.
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install service and harness dependencies
+        run: pip install -r agent/requirements.txt -r evals/requirements.txt
+
+      # AGENTS.md: `make eval` is paid, hits live data, and must NEVER run in CI.
+      # This target is the offline half — no API key, no database, no network — so
+      # it is safe here and is a real gate rather than a formality.
+      #
+      # The web suite is deliberately absent: web/lib/test-cluster.ts hardcodes
+      # PG_BIN = /usr/local/bin, which does not exist on a GitHub runner. Adding it
+      # needs that path made configurable first.
+      - name: Offline agent and eval-harness tests
+        run: make test-agent PYTHON=python
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
